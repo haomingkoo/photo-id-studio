@@ -6,7 +6,7 @@ Photo upload app with:
 2. Person segmentation for background checks (MediaPipe Selfie Segmentation)
 3. Rule-based compliance engine with clear error codes and actions
 4. Auto-crop to country profile dimensions (default: Singapore)
-5. Processed output image (crop + straighten + optional assistive cleanup)
+5. Processed output image (crop + straighten + optional tonal cleanup)
 
 ## Features
 
@@ -16,6 +16,7 @@ Photo upload app with:
 4. Output image is generated only when crop requirements can be satisfied.
 5. UI style is aligned to the `kooexperience.com` dark theme.
 6. Optional beautify mode supports color correction only (no geometry edits).
+7. Assist mode does not generate or repaint shoulder/hair regions.
 
 ## Why MediaPipe
 
@@ -23,7 +24,7 @@ MediaPipe was selected as the default CV backend for this app because it gives t
 
 1. Fast landmark inference on CPU (important for laptop/server deployments without GPU).
 2. Stable, dense facial landmarks suitable for rule checks (eye visibility, roll, pitch/yaw heuristics, mouth-closed checks).
-3. Built-in person segmentation model for fast background checks and assistive cleanup mode.
+3. Built-in person segmentation model for compliance checks (background uniformity, visibility checks).
 4. No external API dependency for core detection logic (lower cost and better privacy posture).
 
 ## Segmentation Strategy
@@ -121,6 +122,7 @@ What this does:
 1. Caps inference resolution to reduce CPU/RAM usage.
 2. Keeps source metadata/resolution checks intact.
 3. Keeps final country output dimensions unchanged.
+4. Keeps output deterministic without synthetic shoulder/background fill.
 
 ## Deploy Online (Railway)
 

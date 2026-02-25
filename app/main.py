@@ -56,8 +56,6 @@ async def analyze(
     country_code: str = Form("SG"),
     mode: str = Form("assist"),
     beauty_mode: str = Form("none"),
-    segmentation_backend: str = Form("mediapipe"),
-    shadow_mode: str = Form("balanced"),
 ) -> AnalyzeResponse:
     if photo.content_type is None or not photo.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Please upload a valid image file.")
@@ -73,8 +71,6 @@ async def analyze(
             country_code=country_code,
             mode=mode,
             beauty_mode=beauty_mode,
-            segmentation_backend=segmentation_backend,
-            shadow_mode=shadow_mode,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
