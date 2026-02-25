@@ -199,15 +199,17 @@ class PhotoCompliancePipeline:
 
         base_crop_w = eye_distance / max(float(profile.eye_distance_fraction_of_width), 1e-6)
         eye_mid = (geometry.left_eye + geometry.right_eye) / 2.0
-        eye_from_top = float(profile.eye_height_fraction_of_height) + float(getattr(profile, "extra_headroom_fraction", 0.0))
-        eye_from_top = float(np.clip(eye_from_top, 0.32, 0.62))
-        torso_bias = float(np.clip(getattr(profile, "extra_torso_fraction", 0.05), 0.0, 0.18))
+        eye_from_top = float(profile.eye_height_fraction_of_height) + (
+            float(getattr(profile, "extra_headroom_fraction", 0.0)) * 0.55
+        )
+        eye_from_top = float(np.clip(eye_from_top, 0.36, 0.54))
+        torso_bias = float(np.clip(getattr(profile, "extra_torso_fraction", 0.05), 0.0, 0.12))
         hair_margin_fraction = float(np.clip(getattr(profile, "hair_margin_fraction", 0.24), 0.10, 0.40))
 
         # Guarantee enough frame around head so we do not clip top/sides.
-        side_margin = float(bw) * 0.22
+        side_margin = float(bw) * 0.20
         top_margin = float(bh) * hair_margin_fraction
-        bottom_margin = float(bh) * (0.70 + torso_bias * 1.25)
+        bottom_margin = float(bh) * (0.82 + torso_bias * 1.40)
         req_w = float(bw) + side_margin * 2.0
         req_h = float(bh) + top_margin + bottom_margin
         req_w_from_h = req_h / max(aspect, 1e-6)
@@ -223,11 +225,8 @@ class PhotoCompliancePipeline:
             desired_box = (desired_left, desired_top, desired_left + crop_w, desired_top + crop_h)
             return None, None, desired_box, False
 
-        bbox_center_x = float(x + (bw * 0.5))
-        target_center_x = float((eye_mid[0] * 0.9) + (bbox_center_x * 0.1))
-        desired_left = float(target_center_x - (crop_w / 2.0))
+        desired_left = float(eye_mid[0] - (crop_w / 2.0))
         desired_top = float(eye_mid[1] - (crop_h * eye_from_top))
-        desired_top += float(crop_h) * torso_bias
 
         # Clamp crop so bbox + margins stays inside final crop.
         left_min = float(x + bw + side_margin - crop_w)
@@ -838,38 +837,50 @@ class PhotoCompliancePipeline:
             crop_w = max(1, right - left)
             crop_h = max(1, bottom - top)
 
-            # Multi-pass horizontal recentering on the provisional crop.
-            # This keeps framing stable even when bbox/hair asymmetry biases the first estimate.
+            # Multi-pass recentering on the provisional crop.
+            # Anchor primarily on eye midpoint and eye-line height (ICA-style framing).
             recenter_total_shift_x = 0
+            recenter_total_shift_y = 0
             recenter_iterations = 0
             recenter_last_err_x = None
-            for _ in range(3):
+            recenter_last_err_y = None
+            target_eye_from_top = float(profile.eye_height_fraction_of_height) + (
+                float(getattr(profile, "extra_headroom_fraction", 0.0)) * 0.55
+            )
+            target_eye_from_top = float(np.clip(target_eye_from_top, 0.36, 0.54))
+            for _ in range(4):
                 probe = image[top:bottom, left:right]
                 probe_faces = self._extract_face_geometry(probe) if probe.size > 0 else []
                 if not probe_faces:
                     break
                 probe_face = max(probe_faces, key=lambda item: item.bbox[2] * item.bbox[3])
                 probe_eye_mid = (probe_face.left_eye + probe_face.right_eye) / 2.0
-                probe_bbox_cx = float(probe_face.bbox[0] + (probe_face.bbox[2] * 0.5))
-                # Use mostly eye midpoint but blend in bbox center for stronger visual centering.
-                probe_target_cx = float((probe_eye_mid[0] * 0.7) + (probe_bbox_cx * 0.3))
-                center_err_x = float(probe_target_cx - (crop_w * 0.5))
+                center_err_x = float(probe_eye_mid[0] - (crop_w * 0.5))
+                center_err_y = float(probe_eye_mid[1] - (crop_h * target_eye_from_top))
                 recenter_last_err_x = center_err_x
-                if abs(center_err_x) < 1.5:
+                recenter_last_err_y = center_err_y
+                if abs(center_err_x) < 1.25 and abs(center_err_y) < 1.25:
                     break
 
-                max_shift = int(round(crop_w * 0.16))
+                max_shift = int(round(crop_w * 0.18))
+                max_shift_y = int(round(crop_h * 0.12))
                 shift_x = int(np.clip(int(round(center_err_x * 0.92)), -max_shift, max_shift))
-                if abs(shift_x) < 1:
+                shift_y = int(np.clip(int(round(center_err_y * 0.92)), -max_shift_y, max_shift_y))
+                if abs(shift_x) < 1 and abs(shift_y) < 1:
                     break
 
                 new_left = int(np.clip(left + shift_x, 0, w - crop_w))
+                new_top = int(np.clip(top + shift_y, 0, h - crop_h))
                 applied_shift = new_left - left
-                if applied_shift == 0:
+                applied_shift_y = new_top - top
+                if applied_shift == 0 and applied_shift_y == 0:
                     break
                 left = new_left
+                top = new_top
                 right = left + crop_w
+                bottom = top + crop_h
                 recenter_total_shift_x += applied_shift
+                recenter_total_shift_y += applied_shift_y
                 recenter_iterations += 1
 
             if recenter_iterations > 0:
@@ -887,12 +898,17 @@ class PhotoCompliancePipeline:
                     self._check(
                         code="CROP_RECENTERED",
                         status="pass",
-                        message=f"Crop horizontally recentered by {recenter_total_shift_x}px.",
+                        message=(
+                            f"Crop recentered by x={recenter_total_shift_x}px, "
+                            f"y={recenter_total_shift_y}px."
+                        ),
                         action="No action needed.",
                         details={
                             "iterations": recenter_iterations,
                             "shift_x_px": recenter_total_shift_x,
+                            "shift_y_px": recenter_total_shift_y,
                             "final_center_error_x_px": round(float(recenter_last_err_x or 0.0), 2),
+                            "final_center_error_y_px": round(float(recenter_last_err_y or 0.0), 2),
                         },
                     )
                 )
@@ -982,33 +998,33 @@ class PhotoCompliancePipeline:
                 )
 
             if mode.lower() in {"assist", "enhanced", "enhance"}:
+                beauty_mode_norm = (beauty_mode or "").lower()
+                processed_base = processed.copy()
                 mask_for_processed = None
-                if segment_mask is not None:
+                if segment_mask is not None and beauty_mode_norm in {
+                    "color",
+                    "tone",
+                    "color_correction",
+                    "soft",
+                    "soft_light",
+                    "natural",
+                }:
                     mask_crop = segment_mask[top:bottom, left:right]
                     if mask_crop.size > 0:
                         mask_for_processed = cv2.resize(mask_crop, output_size, interpolation=cv2.INTER_LINEAR)
-                fx = (x - left) * output_size[0] / crop_w
-                fy = (y - top) * output_size[1] / crop_h
-                fw_scaled = fw * output_size[0] / crop_w
-                fh_scaled = fh * output_size[1] / crop_h
-                face_box_processed = (
-                    int(round(fx)),
-                    int(round(fy)),
-                    int(round(fw_scaled)),
-                    int(round(fh_scaled)),
-                )
-                processed_base = enhance_image(
-                    processed,
-                    person_mask=mask_for_processed,
-                    background_whitening=False,
-                    beauty_mode="none",
-                    face_box=face_box_processed,
-                )
-                processed_base = suppress_edge_artifacts(processed_base, border=2)
                 processed = processed_base
 
-                beauty_mode_norm = (beauty_mode or "").lower()
                 if beauty_mode_norm in {"color", "tone", "color_correction", "soft", "soft_light", "natural"}:
+                    fx = (x - left) * output_size[0] / crop_w
+                    fy = (y - top) * output_size[1] / crop_h
+                    fw_scaled = fw * output_size[0] / crop_w
+                    fh_scaled = fh * output_size[1] / crop_h
+                    face_box_processed = (
+                        int(round(fx)),
+                        int(round(fy)),
+                        int(round(fw_scaled)),
+                        int(round(fh_scaled)),
+                    )
                     apply_mode = "soft" if beauty_mode_norm in {"soft", "soft_light", "natural"} else "color"
                     processed_beauty = enhance_image(
                         processed_base.copy(),

@@ -461,7 +461,7 @@
             <div class="field">
               <label for="mode">Processing Mode</label>
               <select id="mode" name="mode">
-                <option value="assist">Assist (crop + light + tonal cleanup)</option>
+                <option value="assist">Assist (crop + light, optional tone)</option>
                 <option value="strict">Strict (crop only)</option>
               </select>
             </div>
@@ -698,7 +698,7 @@
               <li>Frontend: single-page HTML/CSS/JS, no framework dependency.</li>
               <li>API: FastAPI `/api/analyze` and `/api/countries`.</li>
               <li>CV: MediaPipe FaceMesh + MediaPipe segmentation + OpenCV post-process.</li>
-              <li>Post-process: OpenCV crop + tonal cleanup + optional beautify (no subject-edge repaint).</li>
+              <li>Post-process: OpenCV crop + optional beautify only when selected (no subject-edge repaint).</li>
               <li>Deploy: one service container via Uvicorn behind HTTPS.</li>
             </ul>
           </div>
