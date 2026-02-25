@@ -259,6 +259,56 @@ def _guided_refine_mask(bgr_image: np.ndarray, soft_mask: np.ndarray) -> np.ndar
         return soft_mask
 
 
+def _subject_border_touch_ratio(mask: np.ndarray, threshold: float = 0.35) -> float:
+    h, w = mask.shape[:2]
+    edge = max(2, int(round(min(h, w) * 0.01)))
+    border_zone = np.zeros((h, w), dtype=np.uint8)
+    border_zone[:edge, :] = 1
+    border_zone[-edge:, :] = 1
+    border_zone[:, :edge] = 1
+    border_zone[:, -edge:] = 1
+    border_pixels = int(border_zone.sum())
+    if border_pixels <= 0:
+        return 0.0
+    person = mask > float(threshold)
+    touching = int((person & (border_zone > 0)).sum())
+    return float(touching) / float(border_pixels)
+
+
+def _build_border_touch_map(mask: np.ndarray) -> np.ndarray:
+    h, w = mask.shape[:2]
+    person_solid = (mask > 0.50).astype(np.uint8)
+    if int(person_solid.sum()) == 0:
+        return np.zeros_like(mask, dtype=np.float32)
+
+    min_area = max(24, int(0.00035 * h * w))
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(person_solid, connectivity=8)
+    border_touch = np.zeros((h, w), dtype=np.uint8)
+    for label in range(1, num_labels):
+        x = int(stats[label, cv2.CC_STAT_LEFT])
+        y = int(stats[label, cv2.CC_STAT_TOP])
+        bw = int(stats[label, cv2.CC_STAT_WIDTH])
+        bh = int(stats[label, cv2.CC_STAT_HEIGHT])
+        area = int(stats[label, cv2.CC_STAT_AREA])
+        if area < min_area:
+            continue
+        touches_border = x <= 0 or y <= 0 or (x + bw) >= w or (y + bh) >= h
+        if touches_border:
+            border_touch[labels == label] = 1
+
+    if int(border_touch.sum()) == 0:
+        return np.zeros_like(mask, dtype=np.float32)
+
+    ks = max(5, int(round(min(h, w) * 0.028)))
+    if ks % 2 == 0:
+        ks += 1
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (ks, ks))
+    border_touch = cv2.dilate(border_touch, kernel, iterations=1).astype(np.float32)
+    sigma = max(1.2, min(h, w) * 0.006)
+    border_touch = cv2.GaussianBlur(border_touch, (0, 0), sigma)
+    return np.clip(border_touch, 0.0, 1.0)
+
+
 def _estimate_background_color(bgr_image: np.ndarray, bg_alpha: np.ndarray) -> np.ndarray:
     confident = bg_alpha > 0.93
     if int(confident.sum()) < 64:
@@ -422,7 +472,9 @@ def enhance_image(
     if person_mask is not None and background_whitening:
         # Edge-aware, gradual background cleanup to avoid fake cutout artifacts.
         mask = _refine_person_mask(person_mask)
-        mask = _refine_mask_with_grabcut(denoised, mask)
+        # GrabCut can over-shrink clothes when the subject already touches frame borders.
+        if _subject_border_touch_ratio(mask, threshold=0.34) < 0.10:
+            mask = _refine_mask_with_grabcut(denoised, mask)
         mask = _guided_refine_mask(denoised, mask)
         bg_alpha = np.clip(1.0 - mask, 0.0, 1.0)
 
@@ -437,16 +489,9 @@ def enhance_image(
         protect_zone = cv2.GaussianBlur(protect_dilate, (0, 0), 1.2)
         bg_edit_gate = np.clip(1.0 - protect_zone * 0.98, 0.0, 1.0)
 
-        # If foreground touches frame edges, protect those edge pixels from background whitening.
-        edge_margin = max(4, int(round(min(h_img, w_img) * 0.035)))
-        border_zone = np.zeros_like(mask, dtype=np.float32)
-        border_zone[:edge_margin, :] = 1.0
-        border_zone[-edge_margin:, :] = 1.0
-        border_zone[:, :edge_margin] = 1.0
-        border_zone[:, -edge_margin:] = 1.0
-        border_subject = border_zone * (mask > 0.08).astype(np.float32)
-        border_subject = cv2.GaussianBlur(border_subject, (0, 0), 1.0)
-        bg_edit_gate = np.clip(bg_edit_gate * (1.0 - border_subject * 0.995), 0.0, 1.0)
+        # Protect only true border-touching subject components (not the full frame edge band).
+        border_subject = _build_border_touch_map(mask)
+        bg_edit_gate = np.clip(bg_edit_gate * (1.0 - border_subject * 0.96), 0.0, 1.0)
 
         # Restrict heavy whitening/shadow edits to confident background only.
         bg_core = np.clip((bg_alpha - 0.07) / 0.93, 0.0, 1.0)
@@ -483,10 +528,10 @@ def enhance_image(
         denom = np.maximum(alpha3, 0.20)
         fg_unmixed = np.clip((fg - (1.0 - alpha3) * bg_color_3) / denom, 0.0, 255.0)
         # Avoid aggressive unmixed reconstruction in very low-alpha transition pixels.
-        edge_mix = np.repeat((edge_band * 0.22)[:, :, None], 3, axis=2)
+        edge_mix = np.repeat((edge_band * 0.16)[:, :, None], 3, axis=2)
         alpha_gate = np.repeat((mask > 0.34)[:, :, None].astype(np.float32), 3, axis=2)
         border_subject_3 = np.repeat(border_subject[:, :, None], 3, axis=2)
-        edge_mix = edge_mix * alpha_gate * (1.0 - border_subject_3 * 0.90)
+        edge_mix = edge_mix * alpha_gate * (1.0 - border_subject_3 * 0.97)
         fg = fg * (1.0 - edge_mix) + fg_unmixed * edge_mix
 
         # High-gradient transition edges (shoulders/hairline) should resist background fill.
@@ -535,7 +580,7 @@ def enhance_image(
         protect = np.clip((sat_norm - 0.30) * 1.6, 0.0, 1.0) * edge_zone
         white_mix = np.clip(white_mix * (1.0 - protect * 0.75), 0.0, 0.95)
         white_mix = np.clip(white_mix * (1.0 - edge_guard * 0.88), 0.0, 0.95)
-        white_mix = np.clip(white_mix * (1.0 - border_subject * 0.99), 0.0, 0.95)
+        white_mix = np.clip(white_mix * (1.0 - border_subject * 0.985), 0.0, 0.95)
         white_mix = np.clip(white_mix * bg_edit_gate, 0.0, 0.95)
 
         if is_flat_bg and (not is_clean_bg):
@@ -557,7 +602,7 @@ def enhance_image(
 
         # Feather transition band around hair/shoulder boundaries.
         mask_keep = np.clip(mask + edge_guard * 0.10, 0.0, 1.0)
-        mask_keep = np.clip(np.maximum(mask_keep, border_subject * 0.96), 0.0, 1.0)
+        mask_keep = np.clip(np.maximum(mask_keep, border_subject * 0.99), 0.0, 1.0)
         edge_soft = cv2.GaussianBlur(mask_keep, (0, 0), 2.4)
         edge_soft_3 = np.repeat(edge_soft[:, :, None], 3, axis=2)
         denoised = (fg * edge_soft_3 + bg_adjusted * (1.0 - edge_soft_3)).clip(0, 255).astype(np.uint8)

@@ -6,7 +6,7 @@ Photo upload app with:
 2. Person segmentation for background checks (MediaPipe Selfie Segmentation)
 3. Rule-based compliance engine with clear error codes and actions
 4. Auto-crop to country profile dimensions (default: Singapore)
-5. Processed output image (crop + straighten + optional tonal cleanup)
+5. Processed output image (crop + straighten + assist background whitening + optional facial tonal cleanup)
 
 ## Features
 
@@ -15,8 +15,8 @@ Photo upload app with:
 3. Shows what to do next for each failed/warned check.
 4. Output image is generated only when crop requirements can be satisfied.
 5. UI style is aligned to the `kooexperience.com` dark theme.
-6. Optional beautify mode supports color correction only (no geometry edits).
-7. Assist mode does not generate or repaint shoulder/hair regions.
+6. Optional beautify mode supports color correction and soft-light cleanup (no geometry edits).
+7. Assist mode uses edge-guarded background whitening and never uses generative shoulder/hair repaint.
 
 ## Why MediaPipe
 
@@ -33,8 +33,27 @@ The app uses a single segmentation backend:
 
 1. `MediaPipe`:
    - CPU-friendly and stable for server deployment.
-   - Works with OpenCV refinement and edge guards for cleaner shoulders/hair boundaries.
+   - Works with OpenCV refinement, border guards, and confidence gating for cleaner shoulders/hair boundaries.
    - No external ONNX model file path required.
+
+## Current Methods (Pipeline Summary)
+
+1. Decode + EXIF normalize:
+   - Applies orientation safely and captures metadata used by recency/mirror checks.
+2. Face geometry extraction:
+   - Uses FaceMesh landmarks for eye distance, eye line, roll/yaw/pitch proxies, and mouth checks.
+3. Segmentation and background checks:
+   - Uses MediaPipe person mask for background compliance checks and assist post-processing.
+4. Crop solver:
+   - Computes profile-target crop from inter-eye distance plus side/top/bottom safety margins.
+   - Runs iterative eye-line recentering.
+   - Runs segmentation-aware vertical rebalance to keep crown and shoulders visible while reducing excess torso.
+5. Assist post-process:
+   - Applies deterministic background whitening only when segmentation is available.
+   - Protects hair/shoulder frame edges with border guards to avoid cutout halos.
+   - Applies optional face-only color correction / soft-light smoothing when selected.
+6. Reporting:
+   - Returns pass/review/fail, check-level codes, actions, and output previews.
 
 ### Why not GenAI replacement
 
@@ -122,7 +141,7 @@ What this does:
 1. Caps inference resolution to reduce CPU/RAM usage.
 2. Keeps source metadata/resolution checks intact.
 3. Keeps final country output dimensions unchanged.
-4. Keeps output deterministic without synthetic shoulder/background fill.
+4. Keeps output deterministic without generative shoulder/background replacement.
 
 ## Deploy Online (Railway)
 
