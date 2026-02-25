@@ -528,10 +528,10 @@ def enhance_image(
         denom = np.maximum(alpha3, 0.20)
         fg_unmixed = np.clip((fg - (1.0 - alpha3) * bg_color_3) / denom, 0.0, 255.0)
         # Avoid aggressive unmixed reconstruction in very low-alpha transition pixels.
-        edge_mix = np.repeat((edge_band * 0.16)[:, :, None], 3, axis=2)
+        edge_mix = np.repeat((edge_band * 0.14)[:, :, None], 3, axis=2)
         alpha_gate = np.repeat((mask > 0.34)[:, :, None].astype(np.float32), 3, axis=2)
         border_subject_3 = np.repeat(border_subject[:, :, None], 3, axis=2)
-        edge_mix = edge_mix * alpha_gate * (1.0 - border_subject_3 * 0.97)
+        edge_mix = edge_mix * alpha_gate * (1.0 - border_subject_3)
         fg = fg * (1.0 - edge_mix) + fg_unmixed * edge_mix
 
         # High-gradient transition edges (shoulders/hairline) should resist background fill.
@@ -580,7 +580,7 @@ def enhance_image(
         protect = np.clip((sat_norm - 0.30) * 1.6, 0.0, 1.0) * edge_zone
         white_mix = np.clip(white_mix * (1.0 - protect * 0.75), 0.0, 0.95)
         white_mix = np.clip(white_mix * (1.0 - edge_guard * 0.88), 0.0, 0.95)
-        white_mix = np.clip(white_mix * (1.0 - border_subject * 0.985), 0.0, 0.95)
+        white_mix = np.clip(white_mix * (1.0 - border_subject * 0.995), 0.0, 0.95)
         white_mix = np.clip(white_mix * bg_edit_gate, 0.0, 0.95)
 
         if is_flat_bg and (not is_clean_bg):
@@ -640,11 +640,20 @@ def suppress_edge_artifacts(bgr_image: np.ndarray, border: int = 2) -> np.ndarra
         edge_std = float(edge_luma.std())
         inner_std = float(inner_luma.std())
         color_delta = float(np.mean(np.abs(edge_f.mean(axis=(0, 1)) - inner_f.mean(axis=(0, 1)))))
+        row_edge = edge_luma.mean(axis=1)
+        row_inner = inner_luma.mean(axis=1)
+        row_delta = np.abs(row_edge - row_inner)
+        high_delta_ratio = float((row_delta > 26.0).mean())
+        extreme_ratio = float(((row_edge < 6.0) | (row_edge > 249.0)).mean())
+        row_band_std = float(row_edge.std())
 
         is_extreme_band = edge_mean < 4.0 or edge_mean > 251.0
         is_flat_band = edge_std < max(2.0, inner_std * 0.35 + 1.0)
         has_strong_jump = abs(edge_mean - inner_mean) > 32.0 or color_delta > 28.0
-        return is_flat_band and (is_extreme_band or has_strong_jump)
+        # Fix only persistent full-edge strip artifacts; do not touch natural content
+        # where clothes/hair legitimately reach the border.
+        is_consistent_strip = row_band_std < 7.0 and (high_delta_ratio > 0.88 or extreme_ratio > 0.88)
+        return is_flat_band and is_consistent_strip and (is_extreme_band or has_strong_jump)
 
     top_edge = out[:border, :]
     top_inner = out[border : border * 2, :]

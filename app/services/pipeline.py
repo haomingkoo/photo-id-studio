@@ -1115,20 +1115,56 @@ class PhotoCompliancePipeline:
                 # even if optional beautify is off.
                 enable_whitening = mask_for_processed is not None
                 if enable_whitening or apply_mode != "none":
-                    processed_assist = enhance_image(
-                        processed_base.copy(),
-                        person_mask=mask_for_processed,
-                        background_whitening=enable_whitening,
-                        beauty_mode=apply_mode,
-                        face_box=face_box_processed,
-                    )
+                    # Pad before assist processing so edge-aware mask ops do not invent border artifacts
+                    # when shoulders/clothes touch the crop boundary.
+                    if enable_whitening:
+                        pad = max(8, int(round(min(output_size) * 0.04)))
+                        padded_img = cv2.copyMakeBorder(
+                            processed_base.copy(),
+                            pad,
+                            pad,
+                            pad,
+                            pad,
+                            borderType=cv2.BORDER_REFLECT_101,
+                        )
+                        padded_mask = cv2.copyMakeBorder(
+                            mask_for_processed.astype(np.float32),
+                            pad,
+                            pad,
+                            pad,
+                            pad,
+                            borderType=cv2.BORDER_REPLICATE,
+                        )
+                        padded_face_box = None
+                        if face_box_processed is not None:
+                            fx, fy, fw_box, fh_box = face_box_processed
+                            padded_face_box = (fx + pad, fy + pad, fw_box, fh_box)
+                        processed_assist = enhance_image(
+                            padded_img,
+                            person_mask=padded_mask,
+                            background_whitening=True,
+                            beauty_mode=apply_mode,
+                            face_box=padded_face_box,
+                        )
+                        processed_assist = processed_assist[
+                            pad : (pad + output_size[1]),
+                            pad : (pad + output_size[0]),
+                        ]
+                    else:
+                        processed_assist = enhance_image(
+                            processed_base.copy(),
+                            person_mask=None,
+                            background_whitening=False,
+                            beauty_mode=apply_mode,
+                            face_box=face_box_processed,
+                        )
                     processed = processed_assist
 
                 if apply_mode != "none":
                     comparison_no_correction_b64 = encode_jpeg_base64(processed_base)
                     comparison_color_correction_b64 = encode_jpeg_base64(processed)
 
-            processed = suppress_edge_artifacts(processed, border=2)
+            processed = suppress_edge_artifacts(processed, border=1)
             processed_b64 = encode_jpeg_base64(processed)
             checks.append(
                 self._check(
