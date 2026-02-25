@@ -1017,15 +1017,25 @@ class PhotoCompliancePipeline:
             # Straighten mild roll while preserving white corners.
             if abs(roll_deg) > 0.3:
                 ch, cw = cropped.shape[:2]
-                matrix = cv2.getRotationMatrix2D((cw / 2.0, ch / 2.0), -roll_deg, 1.0)
-                cropped = cv2.warpAffine(
+                pad = max(8, int(round(min(ch, cw) * 0.06)))
+                padded = cv2.copyMakeBorder(
                     cropped,
-                    matrix,
-                    (cw, ch),
-                    flags=cv2.INTER_LINEAR,
-                    borderMode=cv2.BORDER_CONSTANT,
-                    borderValue=(248, 248, 248),
+                    pad,
+                    pad,
+                    pad,
+                    pad,
+                    borderType=cv2.BORDER_REFLECT_101,
                 )
+                ph, pw = padded.shape[:2]
+                matrix = cv2.getRotationMatrix2D((pw / 2.0, ph / 2.0), -roll_deg, 1.0)
+                rotated = cv2.warpAffine(
+                    padded,
+                    matrix,
+                    (pw, ph),
+                    flags=cv2.INTER_LINEAR,
+                    borderMode=cv2.BORDER_REFLECT_101,
+                )
+                cropped = rotated[pad : pad + ch, pad : pad + cw]
 
             output_size = (int(profile.output_width_px), int(profile.output_height_px))
             processed = cv2.resize(cropped, output_size, interpolation=cv2.INTER_CUBIC)
