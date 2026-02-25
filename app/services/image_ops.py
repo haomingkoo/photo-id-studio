@@ -528,10 +528,10 @@ def enhance_image(
         denom = np.maximum(alpha3, 0.20)
         fg_unmixed = np.clip((fg - (1.0 - alpha3) * bg_color_3) / denom, 0.0, 255.0)
         # Avoid aggressive unmixed reconstruction in very low-alpha transition pixels.
-        edge_mix = np.repeat((edge_band * 0.14)[:, :, None], 3, axis=2)
+        edge_mix = np.repeat((edge_band * 0.20)[:, :, None], 3, axis=2)
         alpha_gate = np.repeat((mask > 0.34)[:, :, None].astype(np.float32), 3, axis=2)
         border_subject_3 = np.repeat(border_subject[:, :, None], 3, axis=2)
-        edge_mix = edge_mix * alpha_gate * (1.0 - border_subject_3)
+        edge_mix = edge_mix * alpha_gate * (1.0 - border_subject_3 * 0.98)
         fg = fg * (1.0 - edge_mix) + fg_unmixed * edge_mix
 
         # High-gradient transition edges (shoulders/hairline) should resist background fill.
@@ -600,10 +600,17 @@ def enhance_image(
         white_mix_3 = np.repeat(np.clip(white_mix[:, :, None], 0.0, 1.0), 3, axis=2)
         bg_adjusted = bg_adjusted * (1.0 - white_mix_3) + white_target * white_mix_3
 
+        # Flatten the outer transition ring on the background side to avoid a visible halo.
+        # This affects only near-subject background, not subject pixels.
+        bg_ring = np.clip(cv2.GaussianBlur(mask, (0, 0), 1.5) - mask, 0.0, 1.0)
+        bg_ring = np.clip(bg_ring * bg_alpha * (1.0 - border_subject), 0.0, 1.0)
+        bg_ring_3 = np.repeat((bg_ring * 0.72)[:, :, None], 3, axis=2)
+        bg_adjusted = bg_adjusted * (1.0 - bg_ring_3) + white_target * bg_ring_3
+
         # Feather transition band around hair/shoulder boundaries.
-        mask_keep = np.clip(mask + edge_guard * 0.10, 0.0, 1.0)
+        mask_keep = np.clip(mask + edge_guard * 0.04, 0.0, 1.0)
         mask_keep = np.clip(np.maximum(mask_keep, border_subject * 0.99), 0.0, 1.0)
-        edge_soft = cv2.GaussianBlur(mask_keep, (0, 0), 2.4)
+        edge_soft = cv2.GaussianBlur(mask_keep, (0, 0), 1.7)
         edge_soft_3 = np.repeat(edge_soft[:, :, None], 3, axis=2)
         denoised = (fg * edge_soft_3 + bg_adjusted * (1.0 - edge_soft_3)).clip(0, 255).astype(np.uint8)
 

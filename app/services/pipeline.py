@@ -565,6 +565,11 @@ class PhotoCompliancePipeline:
         face = faces[0]
         x, y, fw, fh = face.bbox
         inter_eye = float(np.linalg.norm(face.left_eye - face.right_eye))
+        low_quality_for_assist = (
+            orig_w < profile.min_input_width_px
+            or orig_h < profile.min_input_height_px
+            or inter_eye < profile.min_eye_distance_px
+        )
 
         if inter_eye < profile.min_eye_distance_px:
             checks.append(
@@ -1124,7 +1129,9 @@ class PhotoCompliancePipeline:
 
                 # Assist mode should still whiten background (when segmentation is available),
                 # even if optional beautify is off.
-                enable_whitening = mask_for_processed is not None
+                enable_whitening = (mask_for_processed is not None) and (not low_quality_for_assist)
+                if low_quality_for_assist:
+                    apply_mode = "none"
                 if enable_whitening or apply_mode != "none":
                     # Pad before assist processing so edge-aware mask ops do not invent border artifacts
                     # when shoulders/clothes touch the crop boundary.
