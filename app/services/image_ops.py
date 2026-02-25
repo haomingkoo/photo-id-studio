@@ -437,6 +437,17 @@ def enhance_image(
         protect_zone = cv2.GaussianBlur(protect_dilate, (0, 0), 1.2)
         bg_edit_gate = np.clip(1.0 - protect_zone * 0.98, 0.0, 1.0)
 
+        # If foreground touches frame edges, protect those edge pixels from background whitening.
+        edge_margin = max(3, int(round(min(h_img, w_img) * 0.02)))
+        border_zone = np.zeros_like(mask, dtype=np.float32)
+        border_zone[:edge_margin, :] = 1.0
+        border_zone[-edge_margin:, :] = 1.0
+        border_zone[:, :edge_margin] = 1.0
+        border_zone[:, -edge_margin:] = 1.0
+        border_subject = border_zone * (mask > 0.12).astype(np.float32)
+        border_subject = cv2.GaussianBlur(border_subject, (0, 0), 1.0)
+        bg_edit_gate = np.clip(bg_edit_gate * (1.0 - border_subject * 0.98), 0.0, 1.0)
+
         # Restrict heavy whitening/shadow edits to confident background only.
         bg_core = np.clip((bg_alpha - 0.07) / 0.93, 0.0, 1.0)
         fg = denoised.astype(np.float32)
@@ -474,7 +485,8 @@ def enhance_image(
         # Avoid aggressive unmixed reconstruction in very low-alpha transition pixels.
         edge_mix = np.repeat((edge_band * 0.22)[:, :, None], 3, axis=2)
         alpha_gate = np.repeat((mask > 0.34)[:, :, None].astype(np.float32), 3, axis=2)
-        edge_mix = edge_mix * alpha_gate
+        border_subject_3 = np.repeat(border_subject[:, :, None], 3, axis=2)
+        edge_mix = edge_mix * alpha_gate * (1.0 - border_subject_3 * 0.90)
         fg = fg * (1.0 - edge_mix) + fg_unmixed * edge_mix
 
         # High-gradient transition edges (shoulders/hairline) should resist background fill.
@@ -523,6 +535,7 @@ def enhance_image(
         protect = np.clip((sat_norm - 0.30) * 1.6, 0.0, 1.0) * edge_zone
         white_mix = np.clip(white_mix * (1.0 - protect * 0.75), 0.0, 0.95)
         white_mix = np.clip(white_mix * (1.0 - edge_guard * 0.88), 0.0, 0.95)
+        white_mix = np.clip(white_mix * (1.0 - border_subject * 0.96), 0.0, 0.95)
         white_mix = np.clip(white_mix * bg_edit_gate, 0.0, 0.95)
 
         if is_flat_bg and (not is_clean_bg):
@@ -544,6 +557,7 @@ def enhance_image(
 
         # Feather transition band around hair/shoulder boundaries.
         mask_keep = np.clip(mask + edge_guard * 0.10, 0.0, 1.0)
+        mask_keep = np.clip(np.maximum(mask_keep, border_subject * 0.96), 0.0, 1.0)
         edge_soft = cv2.GaussianBlur(mask_keep, (0, 0), 2.4)
         edge_soft_3 = np.repeat(edge_soft[:, :, None], 3, axis=2)
         denoised = (fg * edge_soft_3 + bg_adjusted * (1.0 - edge_soft_3)).clip(0, 255).astype(np.uint8)

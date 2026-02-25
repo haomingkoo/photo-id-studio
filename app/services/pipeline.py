@@ -917,6 +917,68 @@ class PhotoCompliancePipeline:
             )
         else:
             left, top, right, bottom = crop_raw
+            crop_w = max(1, right - left)
+            crop_h = max(1, bottom - top)
+
+            # Multi-pass horizontal recentering on the provisional crop.
+            # This keeps framing stable even when bbox/hair asymmetry biases the first estimate.
+            recenter_total_shift_x = 0
+            recenter_iterations = 0
+            recenter_last_err_x = None
+            for _ in range(3):
+                probe = image[top:bottom, left:right]
+                probe_faces = self._extract_face_geometry(probe) if probe.size > 0 else []
+                if not probe_faces:
+                    break
+                probe_face = max(probe_faces, key=lambda item: item.bbox[2] * item.bbox[3])
+                probe_eye_mid = (probe_face.left_eye + probe_face.right_eye) / 2.0
+                probe_bbox_cx = float(probe_face.bbox[0] + (probe_face.bbox[2] * 0.5))
+                # Use mostly eye midpoint but blend in bbox center for stronger visual centering.
+                probe_target_cx = float((probe_eye_mid[0] * 0.7) + (probe_bbox_cx * 0.3))
+                center_err_x = float(probe_target_cx - (crop_w * 0.5))
+                recenter_last_err_x = center_err_x
+                if abs(center_err_x) < 1.5:
+                    break
+
+                max_shift = int(round(crop_w * 0.16))
+                shift_x = int(np.clip(int(round(center_err_x * 0.92)), -max_shift, max_shift))
+                if abs(shift_x) < 1:
+                    break
+
+                new_left = int(np.clip(left + shift_x, 0, w - crop_w))
+                applied_shift = new_left - left
+                if applied_shift == 0:
+                    break
+                left = new_left
+                right = left + crop_w
+                recenter_total_shift_x += applied_shift
+                recenter_iterations += 1
+
+            if recenter_iterations > 0:
+                crop_raw = (left, top, right, bottom)
+                crop_box = CropBox(
+                    left=left,
+                    top=top,
+                    right=right,
+                    bottom=bottom,
+                    width=crop_w,
+                    height=crop_h,
+                )
+                crop_adjusted = True
+                checks.append(
+                    self._check(
+                        code="CROP_RECENTERED",
+                        status="pass",
+                        message=f"Crop horizontally recentered by {recenter_total_shift_x}px.",
+                        action="No action needed.",
+                        details={
+                            "iterations": recenter_iterations,
+                            "shift_x_px": recenter_total_shift_x,
+                            "final_center_error_x_px": round(float(recenter_last_err_x or 0.0), 2),
+                        },
+                    )
+                )
+
             if crop_adjusted:
                 checks.append(
                     self._check(
