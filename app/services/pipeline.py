@@ -173,16 +173,9 @@ class PhotoCompliancePipeline:
         bgr_image: np.ndarray,
         backend: str = "mediapipe",
     ) -> tuple[np.ndarray | None, str, str | None]:
-        requested = (backend or "mediapipe").strip().lower()
-        note = None
-        if requested not in {"mediapipe", "auto"}:
-            note = "Only MediaPipe backend is enabled in this build."
-        elif requested == "auto":
-            note = "Auto mode maps to MediaPipe in this build."
-
         mask = self._segment_person_mediapipe(bgr_image)
         if mask is not None:
-            return mask, "mediapipe", note
+            return mask, "mediapipe", None
         return None, "none", "MediaPipe segmentation unavailable."
 
     def _compute_crop(
@@ -282,8 +275,6 @@ class PhotoCompliancePipeline:
         country_code: str,
         mode: str,
         beauty_mode: str = "none",
-        segmentation_backend: str = "mediapipe",
-        shadow_mode: str = "balanced",
     ) -> tuple[AnalysisReport, str | None, str | None, str | None, str | None]:
         settings = load_country_settings()
         requested_code = (country_code or settings.default_country).strip().upper()
@@ -721,14 +712,14 @@ class PhotoCompliancePipeline:
                 )
             )
 
-        segment_mask, segmentation_used, segmentation_note = self._segment_person(image, backend=segmentation_backend)
+        segment_mask, segmentation_used, segmentation_note = self._segment_person(image)
         checks.append(
             self._check(
                 code="SEGMENTATION_BACKEND_USED",
                 status="pass" if segmentation_used != "none" else "manual",
                 message=f"Segmentation backend used: {segmentation_used}.",
                 action="No action needed." if segmentation_used != "none" else "Install/enable a segmentation backend.",
-                details={"requested_backend": segmentation_backend, "used_backend": segmentation_used},
+                details={"used_backend": segmentation_used},
             )
         )
         if segmentation_note:
@@ -737,8 +728,8 @@ class PhotoCompliancePipeline:
                     code="SEGMENTATION_BACKEND_FALLBACK",
                     status="warn" if segmentation_used != "none" else "manual",
                     message=segmentation_note,
-                    action="If needed, select another backend from the UI.",
-                    details={"requested_backend": segmentation_backend, "used_backend": segmentation_used},
+                    action="Verify dependency installation and restart service if segmentation is required.",
+                    details={"used_backend": segmentation_used},
                 )
             )
 
@@ -1009,10 +1000,9 @@ class PhotoCompliancePipeline:
                 processed_base = enhance_image(
                     processed,
                     person_mask=mask_for_processed,
-                    background_whitening=True,
+                    background_whitening=False,
                     beauty_mode="none",
                     face_box=face_box_processed,
-                    shadow_mode=shadow_mode,
                 )
                 processed_base = suppress_edge_artifacts(processed_base, border=2)
                 processed = processed_base
@@ -1026,8 +1016,7 @@ class PhotoCompliancePipeline:
                         background_whitening=False,
                         beauty_mode=apply_mode,
                         face_box=face_box_processed,
-                        shadow_mode=shadow_mode,
-                    )
+                        )
                     processed_beauty = suppress_edge_artifacts(processed_beauty, border=2)
                     processed = processed_beauty
                     comparison_no_correction_b64 = encode_jpeg_base64(processed_base)

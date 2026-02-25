@@ -460,14 +460,8 @@
             <div class="field">
               <label for="mode">Processing Mode</label>
               <select id="mode" name="mode">
-                <option value="assist">Assist (crop + light + natural background refine)</option>
+                <option value="assist">Assist (crop + light + tonal cleanup)</option>
                 <option value="strict">Strict (crop only)</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="segmentationBackend">Segmentation Backend</label>
-              <select id="segmentationBackend" name="segmentation_backend">
-                <option value="mediapipe">MediaPipe</option>
               </select>
             </div>
             <div class="field">
@@ -476,13 +470,6 @@
                 <option value="none">Off</option>
                 <option value="color">Color correction only</option>
                 <option value="soft">Soft light + smooth</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="shadowMode">Shadow Correction</label>
-              <select id="shadowMode" name="shadow_mode">
-                <option value="balanced">Balanced</option>
-                <option value="aggressive">Aggressive (background only)</option>
               </select>
             </div>
             <div class="field">
@@ -669,7 +656,7 @@
             <ul>
               <li>Decode + EXIF first so orientation and mirrored selfie flags are handled before any geometry logic.</li>
               <li>Run face geometry before enhancement so pass/fail is based on source photo quality, not edited output.</li>
-              <li>Compute segmentation before background edits so the app modifies wall pixels, not skin or clothes.</li>
+              <li>Use segmentation only for compliance checks; processed output does not synthesize or repaint subject edges.</li>
               <li>Run crop after quality checks so the output matches country dimensions and head-size constraints.</li>
               <li>Apply beautify last and keep it optional so compliance and appearance remain separate decisions.</li>
             </ul>
@@ -710,7 +697,7 @@
               <li>Frontend: single-page HTML/CSS/JS, no framework dependency.</li>
               <li>API: FastAPI `/api/analyze` and `/api/countries`.</li>
               <li>CV: MediaPipe FaceMesh + MediaPipe segmentation + OpenCV post-process.</li>
-              <li>Post-process: OpenCV edge-safe crop, background-only shadow flattening, optional beautify.</li>
+              <li>Post-process: OpenCV crop + tonal cleanup + optional beautify (no subject-edge repaint).</li>
               <li>Deploy: one service container via Uvicorn behind HTTPS.</li>
             </ul>
           </div>
@@ -729,7 +716,7 @@
             <ul>
               <li>Segmentation backend is fixed to MediaPipe.</li>
               <li>If status is `FAIL`, fix fail codes first, then do visual tuning.</li>
-              <li>Use `Aggressive` shadow mode only if wall shadows are strong.</li>
+              <li>If shoulders/hair edges look wrong, retake instead of forcing synthetic cleanup.</li>
               <li>Retake if hair/shoulders are clipped instead of forcing cleanup.</li>
               <li>Review top fail codes regularly and tune thresholds with real samples.</li>
             </ul>
@@ -831,8 +818,6 @@
       fd.append('country_code', countrySelect.value);
       fd.append('mode', document.getElementById('mode').value);
       fd.append('beauty_mode', document.getElementById('beautyMode').value);
-      fd.append('segmentation_backend', document.getElementById('segmentationBackend').value);
-      fd.append('shadow_mode', document.getElementById('shadowMode').value);
 
       const localPreviewUrl = URL.createObjectURL(file);
       originalPreview.src = localPreviewUrl;
