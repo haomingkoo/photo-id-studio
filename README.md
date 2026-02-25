@@ -26,19 +26,14 @@ MediaPipe was selected as the default CV backend for this app because it gives t
 3. Built-in person segmentation model for fast background checks and assistive cleanup mode.
 4. No external API dependency for core detection logic (lower cost and better privacy posture).
 
-## Segmentation Backend Strategy
+## Segmentation Strategy
 
-The app uses a dual-backend segmentation strategy:
+The app uses a single segmentation backend:
 
-1. `MODNet` (preferred quality):
-   - Better boundary quality on hair/shoulders.
-   - Heavier runtime footprint.
-2. `MediaPipe` (fallback speed):
-   - Lower compute cost, stable CPU performance.
-   - Weaker on fine garment edges.
-3. `Auto` selection (recommended):
-   - Tries MODNet first, falls back to MediaPipe if unavailable.
-   - The actual backend used is returned in the report for transparency.
+1. `MediaPipe`:
+   - CPU-friendly and stable for server deployment.
+   - Works with OpenCV refinement and edge guards for cleaner shoulders/hair boundaries.
+   - No external ONNX model file path required.
 
 ### Why not GenAI replacement
 
@@ -144,17 +139,12 @@ This repo is now deployment-ready with:
    - `MAX_PROCESSING_LONG_SIDE=1920`
    - `MAX_PROCESSING_MEGAPIXELS=4.0`
    - `MAX_PREVIEW_LONG_SIDE=1400`
-5. Optional if using MODNet in production:
-   - include `models/modnet.onnx`
-   - set `MODNET_MODEL_PATH=/app/models/modnet.onnx`
-   - add `onnxruntime` to `requirements.txt`
-6. Healthcheck path:
+5. Healthcheck path:
    - `/api/health`
 
 ### Suggested instance size
 
-1. Minimum: `1 vCPU / 2 GB RAM` (MediaPipe fallback path).
-2. Better for MODNet: `2 vCPU / 4 GB RAM`.
+1. Recommended: `1 vCPU / 2 GB RAM` for MediaPipe-only deployment.
 
 ## Run Locally
 

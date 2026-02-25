@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 import os
 
@@ -28,10 +27,6 @@ try:
 except Exception:  # pragma: no cover
     mp = None
 
-try:
-    import onnxruntime as ort
-except Exception:  # pragma: no cover
-    ort = None
 
 
 EAR_LEFT_IDX = [33, 160, 158, 133, 153, 144]
@@ -58,9 +53,6 @@ class PhotoCompliancePipeline:
     def __init__(self) -> None:
         self.face_mesh = None
         self.segmentation_mediapipe = None
-        self.modnet_session = None
-        self.modnet_input_name = None
-        self.modnet_output_name = None
         if mp is not None:
             try:
                 self.face_mesh = mp.solutions.face_mesh.FaceMesh(
@@ -75,7 +67,6 @@ class PhotoCompliancePipeline:
                 self.segmentation_mediapipe = mp.solutions.selfie_segmentation.SelfieSegmentation(model_selection=1)
             except Exception:
                 self.segmentation_mediapipe = None
-        self._init_modnet()
 
     def _resize_long_side(self, bgr_image: np.ndarray, max_long_side: int) -> tuple[np.ndarray, float]:
         h, w = bgr_image.shape[:2]
@@ -119,25 +110,6 @@ class PhotoCompliancePipeline:
             "source_megapixels": round(src_mp, 2),
             "scaled_megapixels": round((new_h * new_w) / 1_000_000.0, 2),
         }
-
-    def _init_modnet(self) -> None:
-        if ort is None:
-            return
-        default_model = Path(__file__).resolve().parents[2] / "models" / "modnet.onnx"
-        model_path = Path(os.getenv("MODNET_MODEL_PATH", str(default_model)))
-        if not model_path.exists():
-            return
-        try:
-            providers = ["CPUExecutionProvider"]
-            self.modnet_session = ort.InferenceSession(str(model_path), providers=providers)
-            if self.modnet_session.get_inputs():
-                self.modnet_input_name = self.modnet_session.get_inputs()[0].name
-            if self.modnet_session.get_outputs():
-                self.modnet_output_name = self.modnet_session.get_outputs()[0].name
-        except Exception:
-            self.modnet_session = None
-            self.modnet_input_name = None
-            self.modnet_output_name = None
 
     def _check(
         self,
@@ -196,67 +168,22 @@ class PhotoCompliancePipeline:
             return None
         return result.segmentation_mask.astype(np.float32)
 
-    def _segment_person_modnet(self, bgr_image: np.ndarray) -> np.ndarray | None:
-        if self.modnet_session is None or self.modnet_input_name is None:
-            return None
-        h, w = bgr_image.shape[:2]
-        rgb = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
-        target_long = 640
-        scale = target_long / max(h, w)
-        in_h = max(32, int(round(h * scale / 32.0) * 32))
-        in_w = max(32, int(round(w * scale / 32.0) * 32))
-        resized = cv2.resize(rgb, (in_w, in_h), interpolation=cv2.INTER_AREA if scale < 1.0 else cv2.INTER_CUBIC)
-        input_tensor = ((resized - 0.5) / 0.5).transpose(2, 0, 1)[None, ...].astype(np.float32)
-        try:
-            out = self.modnet_session.run(
-                [self.modnet_output_name] if self.modnet_output_name else None,
-                {self.modnet_input_name: input_tensor},
-            )[0]
-        except Exception:
-            return None
-
-        matte = np.asarray(out).squeeze()
-        if matte.ndim != 2:
-            return None
-        if matte.max() > 1.0 or matte.min() < 0.0:
-            matte = 1.0 / (1.0 + np.exp(-matte))
-        matte = np.clip(matte.astype(np.float32), 0.0, 1.0)
-        matte = cv2.resize(matte, (w, h), interpolation=cv2.INTER_LINEAR)
-        matte = cv2.GaussianBlur(matte, (0, 0), 1.1)
-        return np.clip(matte, 0.0, 1.0)
-
     def _segment_person(
         self,
         bgr_image: np.ndarray,
-        backend: str = "auto",
+        backend: str = "mediapipe",
     ) -> tuple[np.ndarray | None, str, str | None]:
-        requested = (backend or "auto").strip().lower()
-        if requested not in {"auto", "mediapipe", "modnet"}:
-            requested = "auto"
+        requested = (backend or "mediapipe").strip().lower()
+        note = None
+        if requested not in {"mediapipe", "auto"}:
+            note = "Only MediaPipe backend is enabled in this build."
+        elif requested == "auto":
+            note = "Auto mode maps to MediaPipe in this build."
 
-        if requested == "modnet":
-            mask = self._segment_person_modnet(bgr_image)
-            if mask is not None:
-                return mask, "modnet", None
-            mask = self._segment_person_mediapipe(bgr_image)
-            if mask is not None:
-                return mask, "mediapipe", "MODNET unavailable or failed. Fell back to MediaPipe."
-            return None, "none", "MODNET unavailable and MediaPipe fallback unavailable."
-
-        if requested == "mediapipe":
-            mask = self._segment_person_mediapipe(bgr_image)
-            if mask is not None:
-                return mask, "mediapipe", None
-            return None, "none", "MediaPipe segmentation unavailable."
-
-        # auto
-        mask = self._segment_person_modnet(bgr_image)
-        if mask is not None:
-            return mask, "modnet", None
         mask = self._segment_person_mediapipe(bgr_image)
         if mask is not None:
-            return mask, "mediapipe", "Auto mode fell back to MediaPipe."
-        return None, "none", "No segmentation backend available."
+            return mask, "mediapipe", note
+        return None, "none", "MediaPipe segmentation unavailable."
 
     def _compute_crop(
         self,
@@ -355,7 +282,7 @@ class PhotoCompliancePipeline:
         country_code: str,
         mode: str,
         beauty_mode: str = "none",
-        segmentation_backend: str = "auto",
+        segmentation_backend: str = "mediapipe",
         shadow_mode: str = "balanced",
     ) -> tuple[AnalysisReport, str | None, str | None, str | None, str | None]:
         settings = load_country_settings()
