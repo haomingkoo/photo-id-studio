@@ -1,0 +1,26 @@
+default_country: SG
+countries:
+  SG:
+    name: Singapore Passport / IC
+    output_width_px: 400
+    output_height_px: 514
+    max_file_size_mb: 8
+    allowed_extensions: [jpg, jpeg, png, heic, heif, webp]
+    max_age_days: 90
+    min_input_width_px: 800
+    min_input_height_px: 1200
+    min_eye_distance_px: 90
+    min_face_height_px: 420
+    eye_distance_fraction_of_width: 0.34
+    eye_height_fraction_of_height: 0.42
+    extra_headroom_fraction: 0.08
+    extra_torso_fraction: 0.07
+    hair_margin_fraction: 0.22
+    max_roll_degrees: 8
+    max_yaw_ratio: 0.22
+    max_pitch_ratio: 0.20
+    min_background_brightness: 208
+    max_background_saturation: 40
+    max_background_stddev: 46
+    min_blur_score: 55
+    min_even_lighting_score: 0.62
