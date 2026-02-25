@@ -476,6 +476,11 @@ def enhance_image(
         if _subject_border_touch_ratio(mask, threshold=0.34) < 0.10:
             mask = _refine_mask_with_grabcut(denoised, mask)
         mask = _guided_refine_mask(denoised, mask)
+        # Contract uncertain matte fringe so soft wall shadows are less likely to be treated as foreground.
+        mask_ref = mask.copy()
+        mask = np.clip((mask_ref - 0.11) / 0.84, 0.0, 1.0)
+        core = cv2.GaussianBlur((mask_ref > 0.82).astype(np.float32), (0, 0), 0.9)
+        mask = np.clip(np.maximum(mask, core * 0.94), 0.0, 1.0)
         bg_alpha = np.clip(1.0 - mask, 0.0, 1.0)
 
         # Build a safety band around the subject so shoulder/hair edges are not whitened.
@@ -487,7 +492,7 @@ def enhance_image(
         protect_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (protect_ks, protect_ks))
         protect_dilate = cv2.dilate(person_solid, protect_kernel, iterations=1).astype(np.float32)
         protect_zone = cv2.GaussianBlur(protect_dilate, (0, 0), 1.2)
-        bg_edit_gate = np.clip(1.0 - protect_zone * 0.98, 0.0, 1.0)
+        bg_edit_gate = np.clip(1.0 - protect_zone * 0.78, 0.08, 1.0)
 
         # Protect only true border-touching subject components (not the full frame edge band).
         border_subject = _build_border_touch_map(mask)
@@ -579,7 +584,7 @@ def enhance_image(
         edge_zone = np.clip(1.0 - np.abs(mask - 0.5) * 2.6, 0.0, 1.0)
         protect = np.clip((sat_norm - 0.30) * 1.6, 0.0, 1.0) * edge_zone
         white_mix = np.clip(white_mix * (1.0 - protect * 0.75), 0.0, 0.95)
-        white_mix = np.clip(white_mix * (1.0 - edge_guard * 0.88), 0.0, 0.95)
+        white_mix = np.clip(white_mix * (1.0 - edge_guard * 0.70), 0.0, 0.95)
         white_mix = np.clip(white_mix * (1.0 - border_subject * 0.995), 0.0, 0.95)
         white_mix = np.clip(white_mix * bg_edit_gate, 0.0, 0.95)
 
@@ -602,15 +607,15 @@ def enhance_image(
 
         # Flatten the outer transition ring on the background side to avoid a visible halo.
         # This affects only near-subject background, not subject pixels.
-        bg_ring = np.clip(cv2.GaussianBlur(mask, (0, 0), 1.5) - mask, 0.0, 1.0)
+        bg_ring = np.clip(cv2.GaussianBlur(mask, (0, 0), 2.4) - mask, 0.0, 1.0)
         bg_ring = np.clip(bg_ring * bg_alpha * (1.0 - border_subject), 0.0, 1.0)
-        bg_ring_3 = np.repeat((bg_ring * 0.72)[:, :, None], 3, axis=2)
+        bg_ring_3 = np.repeat((bg_ring * 0.93)[:, :, None], 3, axis=2)
         bg_adjusted = bg_adjusted * (1.0 - bg_ring_3) + white_target * bg_ring_3
 
         # Feather transition band around hair/shoulder boundaries.
-        mask_keep = np.clip(mask + edge_guard * 0.04, 0.0, 1.0)
+        mask_keep = np.clip(mask + edge_guard * 0.01, 0.0, 1.0)
         mask_keep = np.clip(np.maximum(mask_keep, border_subject * 0.99), 0.0, 1.0)
-        edge_soft = cv2.GaussianBlur(mask_keep, (0, 0), 1.7)
+        edge_soft = cv2.GaussianBlur(mask_keep, (0, 0), 1.1)
         edge_soft_3 = np.repeat(edge_soft[:, :, None], 3, axis=2)
         denoised = (fg * edge_soft_3 + bg_adjusted * (1.0 - edge_soft_3)).clip(0, 255).astype(np.uint8)
 
