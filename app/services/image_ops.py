@@ -425,13 +425,25 @@ def enhance_image(
         mask = _refine_mask_with_grabcut(denoised, mask)
         mask = _guided_refine_mask(denoised, mask)
         bg_alpha = np.clip(1.0 - mask, 0.0, 1.0)
+
+        # Build a safety band around the subject so shoulder/hair edges are not whitened.
+        h_img, w_img = mask.shape[:2]
+        person_solid = (mask > 0.52).astype(np.uint8)
+        protect_ks = max(5, int(round(min(h_img, w_img) * 0.018)))
+        if protect_ks % 2 == 0:
+            protect_ks += 1
+        protect_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (protect_ks, protect_ks))
+        protect_dilate = cv2.dilate(person_solid, protect_kernel, iterations=1).astype(np.float32)
+        protect_zone = cv2.GaussianBlur(protect_dilate, (0, 0), 1.2)
+        bg_edit_gate = np.clip(1.0 - protect_zone * 0.98, 0.0, 1.0)
+
         # Restrict heavy whitening/shadow edits to confident background only.
         bg_core = np.clip((bg_alpha - 0.07) / 0.93, 0.0, 1.0)
         fg = denoised.astype(np.float32)
-        bg_strength = np.power(bg_core, 1.42)
+        bg_strength = np.power(bg_core, 1.42) * bg_edit_gate
         bg_color = _estimate_background_color(fg, bg_alpha)
         bg_color_3 = np.full_like(fg, bg_color[None, None, :], dtype=np.float32)
-        bg_confident = bg_alpha > 0.90
+        bg_confident = (bg_alpha > 0.90) & (bg_edit_gate > 0.85)
         if int(bg_confident.sum()) > 50:
             bg_pixels = fg[bg_confident]
             bg_std_mean = float(np.mean(np.std(bg_pixels, axis=0)))
@@ -490,8 +502,8 @@ def enhance_image(
             v_blur = cv2.GaussianBlur(v, (0, 0), 18.0)
             ref_hi = float(np.percentile(v[bg_confident], 90)) if int(bg_confident.sum()) > 40 else 232.0
             flatten_lift = np.clip(ref_hi - v_blur, 0.0, 72.0)
-            v = np.clip(v + flatten_lift * bg_alpha * 0.40, 0.0, 255.0)
-            s = s * (1.0 - (bg_alpha * 0.08))
+            v = np.clip(v + flatten_lift * bg_alpha * bg_edit_gate * 0.40, 0.0, 255.0)
+            s = s * (1.0 - (bg_alpha * bg_edit_gate * 0.08))
 
         hsv_bg = cv2.merge((h, np.clip(s, 0, 255), np.clip(v, 0, 255))).astype(np.uint8)
         bg_adjusted = cv2.cvtColor(hsv_bg, cv2.COLOR_HSV2BGR).astype(np.float32)
@@ -511,10 +523,11 @@ def enhance_image(
         protect = np.clip((sat_norm - 0.30) * 1.6, 0.0, 1.0) * edge_zone
         white_mix = np.clip(white_mix * (1.0 - protect * 0.75), 0.0, 0.95)
         white_mix = np.clip(white_mix * (1.0 - edge_guard * 0.88), 0.0, 0.95)
+        white_mix = np.clip(white_mix * bg_edit_gate, 0.0, 0.95)
 
         if is_flat_bg and (not is_clean_bg):
             # Flat wall: push closer to clean white and flatten cast/shadows more.
-            flat_like = np.clip(1.0 - (bg_dist / 52.0), 0.0, 1.0) * bg_alpha
+            flat_like = np.clip(1.0 - (bg_dist / 52.0), 0.0, 1.0) * bg_alpha * bg_edit_gate
             white_mix = np.clip(white_mix + flat_like * (0.20 if not aggressive_shadow else 0.30), 0.0, 0.995)
             if int(bg_confident.sum()) > 40:
                 v_ref_hi = float(np.percentile(v[bg_confident], 90))

@@ -285,7 +285,7 @@ class PhotoCompliancePipeline:
         hair_margin_fraction = float(np.clip(getattr(profile, "hair_margin_fraction", 0.24), 0.10, 0.40))
 
         # Guarantee enough frame around head so we do not clip top/sides.
-        side_margin = float(bw) * 0.26
+        side_margin = float(bw) * 0.22
         top_margin = float(bh) * hair_margin_fraction
         bottom_margin = float(bh) * (0.70 + torso_bias * 1.25)
         req_w = float(bw) + side_margin * 2.0
@@ -303,7 +303,9 @@ class PhotoCompliancePipeline:
             desired_box = (desired_left, desired_top, desired_left + crop_w, desired_top + crop_h)
             return None, None, desired_box, False
 
-        desired_left = float(eye_mid[0] - (crop_w / 2.0))
+        bbox_center_x = float(x + (bw * 0.5))
+        target_center_x = float((eye_mid[0] * 0.9) + (bbox_center_x * 0.1))
+        desired_left = float(target_center_x - (crop_w / 2.0))
         desired_top = float(eye_mid[1] - (crop_h * eye_from_top))
         desired_top += float(crop_h) * torso_bias
 
