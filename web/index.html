@@ -581,7 +581,7 @@
 
               <rect x="670" y="38" width="190" height="84" class="node"></rect>
               <text x="688" y="66" class="node-title">4. Segmentation</text>
-              <text x="688" y="86" class="node-sub">MODNet / MediaPipe + refine</text>
+              <text x="688" y="86" class="node-sub">MediaPipe + edge-safe refine</text>
 
               <rect x="880" y="38" width="190" height="84" class="node"></rect>
               <text x="898" y="66" class="node-title">5. Crop + Enhance</text>
@@ -600,7 +600,7 @@
           </div>
           <div class="workflow-meta">
             <p>Hard fail checks run first. Example: mouth open means FAIL even if enhancement looks good.</p>
-            <p>Edits are non-generative. The app only adjusts crop, exposure, mask compositing, and background tone.</p>
+            <p>Edits are non-generative. The app only adjusts crop, exposure, mask compositing, and deterministic background whitening.</p>
             <p>Segmentation backend is MediaPipe in this build.</p>
           </div>
         </div>
@@ -620,8 +620,8 @@
             <ul>
               <li>FaceMesh gives dense landmarks for pose, eye, mouth, and framing checks.</li>
               <li>MediaPipe segmentation provides fast CPU-friendly person/background separation.</li>
-              <li>OpenCV compositing adds edge-safe cleanup on top of the MediaPipe mask.</li>
-              <li>OpenCV handles crop geometry, compositing, and background correction.</li>
+              <li>OpenCV compositing adds confidence gating and border guards on top of the MediaPipe mask.</li>
+              <li>OpenCV handles crop geometry, vertical rebalance, and assist background whitening.</li>
             </ul>
           </div>
           <div class="panel guide-card">
@@ -630,6 +630,7 @@
               <li>FaceMesh runs once per image and returns landmark points in image coordinates.</li>
               <li>From landmarks, the app computes inter-eye distance, roll, yaw proxy, pitch proxy, and mouth gap ratio.</li>
               <li>Segmentation path: run MediaPipe selfie segmentation and get foreground probability mask.</li>
+              <li>Crop pass includes iterative eye-line recentering plus segmentation-aware vertical rebalance.</li>
               <li>Boundary guards protect shoulders/hair near frame edges during whitening.</li>
             </ul>
           </div>
@@ -657,7 +658,7 @@
             <ul>
               <li>Decode + EXIF first so orientation and mirrored selfie flags are handled before any geometry logic.</li>
               <li>Run face geometry before enhancement so pass/fail is based on source photo quality, not edited output.</li>
-              <li>Use segmentation only for compliance checks; processed output does not synthesize or repaint subject edges.</li>
+              <li>Use segmentation for compliance checks and assist whitening; output never uses generative repaint.</li>
               <li>Run crop after quality checks so the output matches country dimensions and head-size constraints.</li>
               <li>Apply beautify last and keep it optional so compliance and appearance remain separate decisions.</li>
             </ul>
@@ -698,7 +699,7 @@
               <li>Frontend: single-page HTML/CSS/JS, no framework dependency.</li>
               <li>API: FastAPI `/api/analyze` and `/api/countries`.</li>
               <li>CV: MediaPipe FaceMesh + MediaPipe segmentation + OpenCV post-process.</li>
-              <li>Post-process: OpenCV crop + optional beautify only when selected (no subject-edge repaint).</li>
+              <li>Post-process: OpenCV crop + assist whitening (when mask exists) + optional beautify (no subject-edge repaint).</li>
               <li>Deploy: one service container via Uvicorn behind HTTPS.</li>
             </ul>
           </div>
