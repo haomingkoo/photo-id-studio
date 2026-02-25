@@ -1151,7 +1151,8 @@ class PhotoCompliancePipeline:
                             pad,
                             pad,
                             pad,
-                            borderType=cv2.BORDER_REPLICATE,
+                            borderType=cv2.BORDER_CONSTANT,
+                            value=0.0,
                         )
                         padded_face_box = None
                         if face_box_processed is not None:
