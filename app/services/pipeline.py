@@ -1090,19 +1090,14 @@ class PhotoCompliancePipeline:
                 beauty_mode_norm = (beauty_mode or "").lower()
                 processed_base = processed.copy()
                 mask_for_processed = None
-                if segment_mask is not None and beauty_mode_norm in {
-                    "color",
-                    "tone",
-                    "color_correction",
-                    "soft",
-                    "soft_light",
-                    "natural",
-                }:
+                if segment_mask is not None:
                     mask_crop = segment_mask[top:bottom, left:right]
                     if mask_crop.size > 0:
                         mask_for_processed = cv2.resize(mask_crop, output_size, interpolation=cv2.INTER_LINEAR)
                 processed = processed_base
 
+                apply_mode = "none"
+                face_box_processed = None
                 if beauty_mode_norm in {"color", "tone", "color_correction", "soft", "soft_light", "natural"}:
                     fx = (x - left) * output_size[0] / crop_w
                     fy = (y - top) * output_size[1] / crop_h
@@ -1115,17 +1110,23 @@ class PhotoCompliancePipeline:
                         int(round(fh_scaled)),
                     )
                     apply_mode = "soft" if beauty_mode_norm in {"soft", "soft_light", "natural"} else "color"
-                    processed_beauty = enhance_image(
+
+                # Assist mode should still whiten background (when segmentation is available),
+                # even if optional beautify is off.
+                enable_whitening = mask_for_processed is not None
+                if enable_whitening or apply_mode != "none":
+                    processed_assist = enhance_image(
                         processed_base.copy(),
                         person_mask=mask_for_processed,
-                        background_whitening=False,
+                        background_whitening=enable_whitening,
                         beauty_mode=apply_mode,
                         face_box=face_box_processed,
-                        )
-                    processed_beauty = suppress_edge_artifacts(processed_beauty, border=2)
-                    processed = processed_beauty
+                    )
+                    processed = processed_assist
+
+                if apply_mode != "none":
                     comparison_no_correction_b64 = encode_jpeg_base64(processed_base)
-                    comparison_color_correction_b64 = encode_jpeg_base64(processed_beauty)
+                    comparison_color_correction_b64 = encode_jpeg_base64(processed)
 
             processed = suppress_edge_artifacts(processed, border=2)
             processed_b64 = encode_jpeg_base64(processed)

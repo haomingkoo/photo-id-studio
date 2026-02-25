@@ -438,15 +438,15 @@ def enhance_image(
         bg_edit_gate = np.clip(1.0 - protect_zone * 0.98, 0.0, 1.0)
 
         # If foreground touches frame edges, protect those edge pixels from background whitening.
-        edge_margin = max(3, int(round(min(h_img, w_img) * 0.02)))
+        edge_margin = max(4, int(round(min(h_img, w_img) * 0.035)))
         border_zone = np.zeros_like(mask, dtype=np.float32)
         border_zone[:edge_margin, :] = 1.0
         border_zone[-edge_margin:, :] = 1.0
         border_zone[:, :edge_margin] = 1.0
         border_zone[:, -edge_margin:] = 1.0
-        border_subject = border_zone * (mask > 0.12).astype(np.float32)
+        border_subject = border_zone * (mask > 0.08).astype(np.float32)
         border_subject = cv2.GaussianBlur(border_subject, (0, 0), 1.0)
-        bg_edit_gate = np.clip(bg_edit_gate * (1.0 - border_subject * 0.98), 0.0, 1.0)
+        bg_edit_gate = np.clip(bg_edit_gate * (1.0 - border_subject * 0.995), 0.0, 1.0)
 
         # Restrict heavy whitening/shadow edits to confident background only.
         bg_core = np.clip((bg_alpha - 0.07) / 0.93, 0.0, 1.0)
@@ -535,7 +535,7 @@ def enhance_image(
         protect = np.clip((sat_norm - 0.30) * 1.6, 0.0, 1.0) * edge_zone
         white_mix = np.clip(white_mix * (1.0 - protect * 0.75), 0.0, 0.95)
         white_mix = np.clip(white_mix * (1.0 - edge_guard * 0.88), 0.0, 0.95)
-        white_mix = np.clip(white_mix * (1.0 - border_subject * 0.96), 0.0, 0.95)
+        white_mix = np.clip(white_mix * (1.0 - border_subject * 0.99), 0.0, 0.95)
         white_mix = np.clip(white_mix * bg_edit_gate, 0.0, 0.95)
 
         if is_flat_bg and (not is_clean_bg):
@@ -581,5 +581,44 @@ def suppress_edge_artifacts(bgr_image: np.ndarray, border: int = 2) -> np.ndarra
     h, w = bgr_image.shape[:2]
     if h <= (border * 2 + 2) or w <= (border * 2 + 2):
         return bgr_image
-    core = bgr_image[border : h - border, border : w - border]
-    return cv2.copyMakeBorder(core, border, border, border, border, borderType=cv2.BORDER_REPLICATE)
+
+    out = bgr_image.copy()
+
+    def _should_fix(edge_strip: np.ndarray, inner_strip: np.ndarray) -> bool:
+        edge_f = edge_strip.astype(np.float32)
+        inner_f = inner_strip.astype(np.float32)
+        edge_luma = cv2.cvtColor(edge_f.astype(np.uint8), cv2.COLOR_BGR2GRAY).astype(np.float32)
+        inner_luma = cv2.cvtColor(inner_f.astype(np.uint8), cv2.COLOR_BGR2GRAY).astype(np.float32)
+
+        edge_mean = float(edge_luma.mean())
+        inner_mean = float(inner_luma.mean())
+        edge_std = float(edge_luma.std())
+        inner_std = float(inner_luma.std())
+        color_delta = float(np.mean(np.abs(edge_f.mean(axis=(0, 1)) - inner_f.mean(axis=(0, 1)))))
+
+        is_extreme_band = edge_mean < 4.0 or edge_mean > 251.0
+        is_flat_band = edge_std < max(2.0, inner_std * 0.35 + 1.0)
+        has_strong_jump = abs(edge_mean - inner_mean) > 32.0 or color_delta > 28.0
+        return is_flat_band and (is_extreme_band or has_strong_jump)
+
+    top_edge = out[:border, :]
+    top_inner = out[border : border * 2, :]
+    if _should_fix(top_edge, top_inner):
+        out[:border, :] = top_inner
+
+    bottom_edge = out[h - border :, :]
+    bottom_inner = out[h - border * 2 : h - border, :]
+    if _should_fix(bottom_edge, bottom_inner):
+        out[h - border :, :] = bottom_inner
+
+    left_edge = out[:, :border]
+    left_inner = out[:, border : border * 2]
+    if _should_fix(left_edge, left_inner):
+        out[:, :border] = left_inner
+
+    right_edge = out[:, w - border :]
+    right_inner = out[:, w - border * 2 : w - border]
+    if _should_fix(right_edge, right_inner):
+        out[:, w - border :] = right_inner
+
+    return out
