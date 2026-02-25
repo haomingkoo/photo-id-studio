@@ -467,9 +467,7 @@
             <div class="field">
               <label for="segmentationBackend">Segmentation Backend</label>
               <select id="segmentationBackend" name="segmentation_backend">
-                <option value="auto">Auto (prefer MODNet, fallback MediaPipe)</option>
                 <option value="mediapipe">MediaPipe</option>
-                <option value="modnet">MODNet</option>
               </select>
             </div>
             <div class="field">
@@ -615,7 +613,7 @@
           <div class="workflow-meta">
             <p>Hard fail checks run first. Example: mouth open means FAIL even if enhancement looks good.</p>
             <p>Edits are non-generative. The app only adjusts crop, exposure, mask compositing, and background tone.</p>
-            <p>`Auto` backend means MODNet first, then MediaPipe if MODNet is not available.</p>
+            <p>Segmentation backend is MediaPipe in this build.</p>
           </div>
         </div>
 
@@ -633,8 +631,8 @@
             <h3>Model Choice</h3>
             <ul>
               <li>FaceMesh gives dense landmarks for pose, eye, mouth, and framing checks.</li>
-              <li>MODNet gives better person boundaries at hair and shoulders.</li>
-              <li>MediaPipe segmentation is the fast fallback for CPU-only deployment.</li>
+              <li>MediaPipe segmentation provides fast CPU-friendly person/background separation.</li>
+              <li>OpenCV compositing adds edge-safe cleanup on top of the MediaPipe mask.</li>
               <li>OpenCV handles crop geometry, compositing, and background correction.</li>
             </ul>
           </div>
@@ -643,28 +641,27 @@
             <ul>
               <li>FaceMesh runs once per image and returns landmark points in image coordinates.</li>
               <li>From landmarks, the app computes inter-eye distance, roll, yaw proxy, pitch proxy, and mouth gap ratio.</li>
-              <li>MODNet path: resize to multiple-of-32 grid, normalize to [-1, 1], run ONNX model, get alpha matte.</li>
-              <li>MediaPipe path: run selfie segmentation and get foreground probability mask.</li>
-              <li>The mask is refined (Gaussian + GrabCut + guided filter) before background fill.</li>
+              <li>Segmentation path: run MediaPipe selfie segmentation and get foreground probability mask.</li>
+              <li>Boundary guards protect shoulders/hair near frame edges during whitening.</li>
             </ul>
           </div>
           <div class="panel guide-card">
             <h3>Backend Selection</h3>
             <ul>
-              <li>`Auto`: try MODNet first, then use MediaPipe if MODNet cannot run.</li>
-              <li>`MODNet`: request MODNet explicitly. If unavailable, a fallback check is logged.</li>
-              <li>`MediaPipe`: force faster segmentation with lower compute cost.</li>
-              <li>The backend used is shown in Result Overview and check logs.</li>
+              <li>`MediaPipe`: CPU-friendly segmentation backend used for all requests.</li>
+              <li>Backend details are still logged in Result Overview and check rows.</li>
+              <li>If MediaPipe is unavailable, segmentation-dependent checks become manual.</li>
+              <li>No external model file path is required for segmentation.</li>
             </ul>
           </div>
           <div class="panel guide-card">
             <h3>Fallback Matrix</h3>
             <ul>
-              <li>If `MODNet` model file or ONNX runtime is missing: fallback to MediaPipe.</li>
-              <li>If both segmentation backends are unavailable: run checks without segmentation-dependent steps.</li>
+              <li>If segmentation backend is unavailable: run checks without segmentation-dependent steps.</li>
               <li>If crop cannot fit in bounds: return `CROP_OUT_OF_BOUNDS` and no processed output.</li>
               <li>If face is not detected: stop geometric checks and return `NO_FACE_DETECTED`.</li>
-              <li>If there are multiple faces: pick the largest face box and mark `MULTIPLE_FACES_DETECTED` warning.</li>
+              <li>If there are multiple faces: return `MULTIPLE_FACES_DETECTED` and stop.</li>
+              <li>Backend used is always logged in result chips and check details.</li>
             </ul>
           </div>
           <div class="panel guide-card">
@@ -712,7 +709,7 @@
             <ul>
               <li>Frontend: single-page HTML/CSS/JS, no framework dependency.</li>
               <li>API: FastAPI `/api/analyze` and `/api/countries`.</li>
-              <li>CV: MediaPipe face mesh + selectable segmentation backend (Auto/MediaPipe/MODNet).</li>
+              <li>CV: MediaPipe FaceMesh + MediaPipe segmentation + OpenCV post-process.</li>
               <li>Post-process: OpenCV edge-safe crop, background-only shadow flattening, optional beautify.</li>
               <li>Deploy: one service container via Uvicorn behind HTTPS.</li>
             </ul>
@@ -730,10 +727,10 @@
           <div class="panel guide-card">
             <h3>Runbook</h3>
             <ul>
-              <li>Start with `Auto` segmentation.</li>
-              <li>If shoulders/hair edges look bad, switch backend and compare results.</li>
+              <li>Segmentation backend is fixed to MediaPipe.</li>
               <li>If status is `FAIL`, fix fail codes first, then do visual tuning.</li>
-              <li>Use `Aggressive` shadow mode only when wall shadows are strong.</li>
+              <li>Use `Aggressive` shadow mode only if wall shadows are strong.</li>
+              <li>Retake if hair/shoulders are clipped instead of forcing cleanup.</li>
               <li>Review top fail codes regularly and tune thresholds with real samples.</li>
             </ul>
           </div>

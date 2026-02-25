@@ -56,7 +56,7 @@ async def analyze(
     country_code: str = Form("SG"),
     mode: str = Form("assist"),
     beauty_mode: str = Form("none"),
-    segmentation_backend: str = Form("auto"),
+    segmentation_backend: str = Form("mediapipe"),
     shadow_mode: str = Form("balanced"),
 ) -> AnalyzeResponse:
     if photo.content_type is None or not photo.content_type.startswith("image/"):
