@@ -1023,7 +1023,8 @@ class PhotoCompliancePipeline:
                     matrix,
                     (cw, ch),
                     flags=cv2.INTER_LINEAR,
-                    borderMode=cv2.BORDER_REPLICATE,
+                    borderMode=cv2.BORDER_CONSTANT,
+                    borderValue=(248, 248, 248),
                 )
 
             output_size = (int(profile.output_width_px), int(profile.output_height_px))
