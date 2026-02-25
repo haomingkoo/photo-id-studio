@@ -200,16 +200,16 @@ class PhotoCompliancePipeline:
         base_crop_w = eye_distance / max(float(profile.eye_distance_fraction_of_width), 1e-6)
         eye_mid = (geometry.left_eye + geometry.right_eye) / 2.0
         eye_from_top = float(profile.eye_height_fraction_of_height) + (
-            float(getattr(profile, "extra_headroom_fraction", 0.0)) * 0.55
+            float(getattr(profile, "extra_headroom_fraction", 0.0)) * 0.78
         )
-        eye_from_top = float(np.clip(eye_from_top, 0.36, 0.54))
-        torso_bias = float(np.clip(getattr(profile, "extra_torso_fraction", 0.05), 0.0, 0.12))
+        eye_from_top = float(np.clip(eye_from_top, 0.36, 0.56))
+        torso_bias = float(np.clip(getattr(profile, "extra_torso_fraction", 0.05), 0.0, 0.14))
         hair_margin_fraction = float(np.clip(getattr(profile, "hair_margin_fraction", 0.24), 0.10, 0.40))
 
         # Guarantee enough frame around head so we do not clip top/sides.
-        side_margin = float(bw) * 0.20
-        top_margin = float(bh) * hair_margin_fraction
-        bottom_margin = float(bh) * (0.82 + torso_bias * 1.40)
+        side_margin = float(bw) * 0.22
+        top_margin = max(float(bh) * hair_margin_fraction, float(eye_distance) * 0.58)
+        bottom_margin = float(bh) * (0.74 + torso_bias * 1.15)
         req_w = float(bw) + side_margin * 2.0
         req_h = float(bh) + top_margin + bottom_margin
         req_w_from_h = req_h / max(aspect, 1e-6)
@@ -265,6 +265,66 @@ class PhotoCompliancePipeline:
             desired_box,
             adjusted,
         )
+
+    def _rebalance_vertical_crop(
+        self,
+        crop_raw: tuple[int, int, int, int],
+        image_shape: tuple[int, int, int],
+        face: FaceGeometry,
+        segment_mask: np.ndarray | None,
+        profile: Any,
+    ) -> tuple[tuple[int, int, int, int], int]:
+        if segment_mask is None:
+            return crop_raw, 0
+
+        left, top, right, bottom = crop_raw
+        crop_w = max(1, right - left)
+        crop_h = max(1, bottom - top)
+        h, _ = image_shape[:2]
+        if crop_w < 10 or crop_h < 10:
+            return crop_raw, 0
+
+        mask_crop = segment_mask[top:bottom, left:right]
+        if mask_crop.size == 0:
+            return crop_raw, 0
+
+        person = mask_crop > 0.42
+        ys, _ = np.where(person)
+        if len(ys) < max(40, int(0.0025 * crop_w * crop_h)):
+            return crop_raw, 0
+
+        top_person = int(ys.min())
+        torso_bias = float(np.clip(getattr(profile, "extra_torso_fraction", 0.05), 0.0, 0.14))
+        extra_headroom = float(np.clip(getattr(profile, "extra_headroom_fraction", 0.0), 0.0, 0.20))
+
+        min_top_gap_px = int(round(crop_h * (0.065 + extra_headroom * 0.30)))
+        min_top_gap_px = int(np.clip(min_top_gap_px, 8, max(8, crop_h // 5)))
+
+        face_bottom_local = int(round((face.bbox[1] + face.bbox[3]) - top))
+        target_face_bottom_px = int(round(crop_h * (0.60 + torso_bias * 0.22)))
+        max_face_bottom_px = int(round(crop_h * (0.72 + torso_bias * 0.10)))
+        target_face_bottom_px = int(np.clip(target_face_bottom_px, 0, crop_h - 1))
+        max_face_bottom_px = int(np.clip(max_face_bottom_px, target_face_bottom_px + 4, crop_h - 1))
+
+        shift_up = 0
+        if top_person < min_top_gap_px:
+            shift_up = max(shift_up, min_top_gap_px - top_person)
+        if face_bottom_local < target_face_bottom_px:
+            shift_up = max(shift_up, target_face_bottom_px - face_bottom_local)
+
+        shift_down = 0
+        if face_bottom_local > max_face_bottom_px:
+            shift_down = max(shift_down, face_bottom_local - max_face_bottom_px)
+
+        net_shift = shift_down - shift_up
+        if net_shift == 0:
+            return crop_raw, 0
+
+        new_top = int(np.clip(top + net_shift, 0, h - crop_h))
+        if new_top == top:
+            return crop_raw, 0
+
+        return (left, new_top, right, new_top + crop_h), int(new_top - top)
 
     def analyze(
         self,
@@ -845,9 +905,9 @@ class PhotoCompliancePipeline:
             recenter_last_err_x = None
             recenter_last_err_y = None
             target_eye_from_top = float(profile.eye_height_fraction_of_height) + (
-                float(getattr(profile, "extra_headroom_fraction", 0.0)) * 0.55
+                float(getattr(profile, "extra_headroom_fraction", 0.0)) * 0.78
             )
-            target_eye_from_top = float(np.clip(target_eye_from_top, 0.36, 0.54))
+            target_eye_from_top = float(np.clip(target_eye_from_top, 0.36, 0.56))
             for _ in range(4):
                 probe = image[top:bottom, left:right]
                 probe_faces = self._extract_face_geometry(probe) if probe.size > 0 else []
@@ -910,6 +970,35 @@ class PhotoCompliancePipeline:
                             "final_center_error_x_px": round(float(recenter_last_err_x or 0.0), 2),
                             "final_center_error_y_px": round(float(recenter_last_err_y or 0.0), 2),
                         },
+                    )
+                )
+
+            crop_rebalanced, rebalance_shift_y = self._rebalance_vertical_crop(
+                crop_raw,
+                image.shape,
+                face,
+                segment_mask,
+                profile,
+            )
+            if rebalance_shift_y != 0:
+                left, top, right, bottom = crop_rebalanced
+                crop_raw = crop_rebalanced
+                crop_box = CropBox(
+                    left=left,
+                    top=top,
+                    right=right,
+                    bottom=bottom,
+                    width=crop_w,
+                    height=crop_h,
+                )
+                crop_adjusted = True
+                checks.append(
+                    self._check(
+                        code="CROP_VERTICAL_REBALANCED",
+                        status="pass",
+                        message=f"Crop vertically rebalanced by y={rebalance_shift_y}px.",
+                        action="No action needed.",
+                        details={"shift_y_px": rebalance_shift_y, "applied_box": crop_raw},
                     )
                 )
 
