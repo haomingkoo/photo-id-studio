@@ -1151,8 +1151,7 @@ class PhotoCompliancePipeline:
                             pad,
                             pad,
                             pad,
-                            borderType=cv2.BORDER_CONSTANT,
-                            value=0.0,
+                            borderType=cv2.BORDER_REFLECT_101,
                         )
                         padded_face_box = None
                         if face_box_processed is not None:
@@ -1169,6 +1168,12 @@ class PhotoCompliancePipeline:
                             pad : (pad + output_size[1]),
                             pad : (pad + output_size[0]),
                         ]
+                        # Clamp the outer 1px frame to the pre-whitened crop so no
+                        # whitening seam can appear at the rendered image border.
+                        processed_assist[0, :] = processed_base[0, :]
+                        processed_assist[-1, :] = processed_base[-1, :]
+                        processed_assist[:, 0] = processed_base[:, 0]
+                        processed_assist[:, -1] = processed_base[:, -1]
                     else:
                         processed_assist = enhance_image(
                             processed_base.copy(),
