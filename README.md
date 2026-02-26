@@ -135,6 +135,11 @@ For low-cost deployment, use these environment variables:
 1. `MAX_PROCESSING_LONG_SIDE=1920`
 2. `MAX_PROCESSING_MEGAPIXELS=4.0`
 3. `MAX_PREVIEW_LONG_SIDE=1400`
+4. `PHOTO_API_RATE_PER_MIN=10`
+5. `PHOTO_API_BURST=20`
+6. `PHOTO_API_DAILY_LIMIT=200`
+7. `PHOTO_API_MAX_INFLIGHT=3`
+8. `PHOTO_API_TRUST_XFF=1`
 
 What this does:
 
@@ -142,6 +147,8 @@ What this does:
 2. Keeps source metadata/resolution checks intact.
 3. Keeps final country output dimensions unchanged.
 4. Keeps output deterministic without generative shoulder/background replacement.
+5. Throttles repeated API calls per IP while still allowing large-image uploads.
+6. Rejects requests quickly when in-flight analysis workers are saturated.
 
 ## Deploy Online (Railway)
 
@@ -160,6 +167,11 @@ This repo is now deployment-ready with:
    - `MAX_PROCESSING_LONG_SIDE=1920`
    - `MAX_PROCESSING_MEGAPIXELS=4.0`
    - `MAX_PREVIEW_LONG_SIDE=1400`
+   - `PHOTO_API_RATE_PER_MIN=10`
+   - `PHOTO_API_BURST=20`
+   - `PHOTO_API_DAILY_LIMIT=200`
+   - `PHOTO_API_MAX_INFLIGHT=3`
+   - `PHOTO_API_TRUST_XFF=1`
 5. Healthcheck path:
    - `/api/health`
 

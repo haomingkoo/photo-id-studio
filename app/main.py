@@ -1,8 +1,16 @@
 from __future__ import annotations
 
+import datetime as dt
+import logging
+import math
+import os
+import threading
+import time
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -13,6 +21,7 @@ from app.services.pipeline import PhotoCompliancePipeline
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 WEB_DIR = BASE_DIR / "web"
+LOG = logging.getLogger("photo_id_studio.api")
 
 app = FastAPI(title="Photo ID Compliance Studio", version="0.1.0")
 
@@ -27,9 +36,148 @@ app.add_middleware(
 pipeline = PhotoCompliancePipeline()
 
 
+@dataclass
+class _BucketState:
+    tokens: float
+    last_refill_mono: float
+    day_ordinal: int
+    daily_count: int = 0
+
+
+@dataclass
+class _RateDecision:
+    allowed: bool
+    reason: str | None
+    retry_after: int | None
+    minute_remaining: int
+    daily_remaining: int
+
+
+class _IpRateLimiter:
+    def __init__(self, rate_per_min: int, burst: int, daily_limit: int):
+        self._rate_per_min = max(1, rate_per_min)
+        self._burst = max(1, burst)
+        self._daily_limit = max(1, daily_limit)
+        self._tokens_per_second = self._rate_per_min / 60.0
+        self._states: dict[str, _BucketState] = {}
+        self._lock = threading.Lock()
+
+    @property
+    def rate_per_min(self) -> int:
+        return self._rate_per_min
+
+    @property
+    def daily_limit(self) -> int:
+        return self._daily_limit
+
+    @staticmethod
+    def _seconds_until_utc_midnight(now_utc: dt.datetime) -> int:
+        tomorrow = (now_utc + dt.timedelta(days=1)).date()
+        midnight = dt.datetime.combine(tomorrow, dt.time.min, tzinfo=dt.timezone.utc)
+        return max(1, int((midnight - now_utc).total_seconds()))
+
+    def check(self, ip: str) -> _RateDecision:
+        now_mono = time.monotonic()
+        now_utc = dt.datetime.now(dt.timezone.utc)
+        day_ordinal = now_utc.date().toordinal()
+
+        with self._lock:
+            state = self._states.get(ip)
+            if state is None:
+                state = _BucketState(
+                    tokens=float(self._burst),
+                    last_refill_mono=now_mono,
+                    day_ordinal=day_ordinal,
+                )
+                self._states[ip] = state
+
+            elapsed = max(0.0, now_mono - state.last_refill_mono)
+            if elapsed > 0:
+                state.tokens = min(float(self._burst), state.tokens + elapsed * self._tokens_per_second)
+                state.last_refill_mono = now_mono
+
+            if state.day_ordinal != day_ordinal:
+                state.day_ordinal = day_ordinal
+                state.daily_count = 0
+
+            if state.daily_count >= self._daily_limit:
+                return _RateDecision(
+                    allowed=False,
+                    reason="daily_limit",
+                    retry_after=self._seconds_until_utc_midnight(now_utc),
+                    minute_remaining=max(0, int(math.floor(state.tokens))),
+                    daily_remaining=0,
+                )
+
+            if state.tokens < 1.0:
+                needed = 1.0 - state.tokens
+                retry_after = max(1, int(math.ceil(needed / self._tokens_per_second)))
+                return _RateDecision(
+                    allowed=False,
+                    reason="rate_limit",
+                    retry_after=retry_after,
+                    minute_remaining=0,
+                    daily_remaining=max(0, self._daily_limit - state.daily_count),
+                )
+
+            state.tokens -= 1.0
+            state.daily_count += 1
+            return _RateDecision(
+                allowed=True,
+                reason=None,
+                retry_after=None,
+                minute_remaining=max(0, int(math.floor(state.tokens))),
+                daily_remaining=max(0, self._daily_limit - state.daily_count),
+            )
+
+
+RATE_PER_MIN = max(1, int(os.getenv("PHOTO_API_RATE_PER_MIN", "10")))
+RATE_BURST = max(1, int(os.getenv("PHOTO_API_BURST", "20")))
+DAILY_LIMIT = max(1, int(os.getenv("PHOTO_API_DAILY_LIMIT", "200")))
+MAX_INFLIGHT_ANALYZE = max(1, int(os.getenv("PHOTO_API_MAX_INFLIGHT", "3")))
+TRUST_X_FORWARDED_FOR = os.getenv("PHOTO_API_TRUST_XFF", "1").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+
+RATE_LIMITER = _IpRateLimiter(rate_per_min=RATE_PER_MIN, burst=RATE_BURST, daily_limit=DAILY_LIMIT)
+INFLIGHT_ANALYZE_GUARD = threading.BoundedSemaphore(MAX_INFLIGHT_ANALYZE)
+
+
+def _resolve_client_ip(request: Request) -> str:
+    if TRUST_X_FORWARDED_FOR:
+        xff = request.headers.get("x-forwarded-for", "")
+        if xff:
+            first = xff.split(",")[0].strip()
+            if first:
+                return first
+    if request.client and request.client.host:
+        return request.client.host
+    return "unknown"
+
+
+def _set_limit_headers(response: Response | JSONResponse, decision: _RateDecision) -> None:
+    response.headers["X-RateLimit-Limit-Minute"] = str(RATE_LIMITER.rate_per_min)
+    response.headers["X-RateLimit-Remaining-Minute"] = str(max(0, decision.minute_remaining))
+    response.headers["X-RateLimit-Limit-Day"] = str(RATE_LIMITER.daily_limit)
+    response.headers["X-RateLimit-Remaining-Day"] = str(max(0, decision.daily_remaining))
+    response.headers["X-InFlight-Limit"] = str(MAX_INFLIGHT_ANALYZE)
+
+
 @app.get("/api/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> dict[str, Any]:
+    return {
+        "status": "ok",
+        "analyze_limits": {
+            "rate_per_min": RATE_PER_MIN,
+            "burst": RATE_BURST,
+            "daily_limit": DAILY_LIMIT,
+            "max_inflight": MAX_INFLIGHT_ANALYZE,
+            "trust_x_forwarded_for": TRUST_X_FORWARDED_FOR,
+        },
+    }
 
 
 @app.get("/api/countries", response_model=list[CountryInfo])
@@ -52,16 +200,53 @@ def countries() -> list[CountryInfo]:
 
 @app.post("/api/analyze", response_model=AnalyzeResponse)
 async def analyze(
+    request: Request,
+    response: Response,
     photo: UploadFile = File(...),
     country_code: str = Form("SG"),
     mode: str = Form("assist"),
     beauty_mode: str = Form("none"),
 ) -> AnalyzeResponse:
+    client_ip = _resolve_client_ip(request)
+    decision = RATE_LIMITER.check(client_ip)
+    if not decision.allowed:
+        retry_after = str(decision.retry_after or 1)
+        payload = JSONResponse(
+            status_code=429,
+            content={
+                "detail": "Too many analyze requests. Please retry later.",
+                "reason": decision.reason,
+            },
+            headers={"Retry-After": retry_after},
+        )
+        _set_limit_headers(payload, decision)
+        LOG.warning(
+            "analyze_rejected ip=%s reason=%s retry_after=%s",
+            client_ip,
+            decision.reason,
+            retry_after,
+        )
+        return payload
+
+    if not INFLIGHT_ANALYZE_GUARD.acquire(blocking=False):
+        payload = JSONResponse(
+            status_code=429,
+            content={"detail": "Server is busy processing other analyze requests. Please retry shortly."},
+            headers={"Retry-After": "5"},
+        )
+        _set_limit_headers(payload, decision)
+        LOG.warning("analyze_rejected ip=%s reason=max_inflight", client_ip)
+        return payload
+
+    _set_limit_headers(response, decision)
+
     if photo.content_type is None or not photo.content_type.startswith("image/"):
+        INFLIGHT_ANALYZE_GUARD.release()
         raise HTTPException(status_code=400, detail="Please upload a valid image file.")
 
     file_bytes = await photo.read()
     if not file_bytes:
+        INFLIGHT_ANALYZE_GUARD.release()
         raise HTTPException(status_code=400, detail="Uploaded image is empty.")
 
     try:
@@ -75,7 +260,10 @@ async def analyze(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # pragma: no cover
-        return JSONResponse(status_code=500, content={"error": "analysis_failed", "detail": str(exc)})
+        LOG.exception("analyze_failed ip=%s filename=%s", client_ip, photo.filename or "upload.jpg")
+        return JSONResponse(status_code=500, content={"error": "analysis_failed", "detail": "Internal error"})
+    finally:
+        INFLIGHT_ANALYZE_GUARD.release()
 
     return AnalyzeResponse(
         report=report,
