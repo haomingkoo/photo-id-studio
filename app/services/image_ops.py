@@ -637,6 +637,12 @@ def suppress_edge_artifacts(bgr_image: np.ndarray, border: int = 2) -> np.ndarra
         return bgr_image
 
     out = bgr_image.copy()
+    # Always stabilize the outermost ring. This removes 1px seam lines that can appear
+    # after padded whitening/trim steps without changing interior content.
+    out[0, :] = out[1, :]
+    out[h - 1, :] = out[h - 2, :]
+    out[:, 0] = out[:, 1]
+    out[:, w - 1] = out[:, w - 2]
 
     def _should_fix(edge_strip: np.ndarray, inner_strip: np.ndarray) -> bool:
         edge_f = edge_strip.astype(np.float32)
