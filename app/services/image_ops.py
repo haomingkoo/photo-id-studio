@@ -429,6 +429,7 @@ def enhance_image(
     beauty_mode: str = "none",
     face_box: tuple[int, int, int, int] | None = None,
     shadow_mode: str = "balanced",
+    seg_backend: str = "mediapipe",
 ) -> np.ndarray:
     # Local contrast enhancement blended with original to boost face clarity without over-processing.
     lab = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2LAB)
@@ -471,18 +472,41 @@ def enhance_image(
         denoised = cv2.convertScaleAbs(denoised, alpha=1.0, beta=min(18.0, lift))
 
     if person_mask is not None and background_whitening:
+        is_rembg = (seg_backend or "").lower() == "rembg"
         # Edge-aware, gradual background cleanup to avoid fake cutout artifacts.
-        mask = _refine_person_mask(person_mask)
+        # rembg already produces sharp, clean masks — skip heavy smoothing that would
+        # introduce blur and halo artifacts at the subject silhouette.
+        if is_rembg:
+            mask = np.clip(person_mask.astype(np.float32), 0.0, 1.0)
+            solid = (mask > 0.50).astype(np.uint8)
+            if int(solid.sum()) > 0:
+                kernel_small = np.ones((3, 3), np.uint8)
+                kernel_mid = np.ones((5, 5), np.uint8)
+                solid = cv2.morphologyEx(solid, cv2.MORPH_CLOSE, kernel_small, iterations=1)
+                solid = cv2.morphologyEx(solid, cv2.MORPH_CLOSE, kernel_mid, iterations=1)
+            core_fill = (mask > 0.86).astype(np.float32)
+            mask = np.clip(np.maximum(
+                mask * 0.98 + cv2.GaussianBlur(solid.astype(np.float32), (0, 0), 0.6) * 0.02,
+                core_fill * 0.97,
+            ), 0.0, 1.0)
+        else:
+            mask = _refine_person_mask(person_mask)
         # GrabCut can over-shrink clothes when the subject already touches frame borders.
+        # Skip for rembg: its neural mask already handles complex backgrounds better than GrabCut.
         border_touch_ratio = _subject_border_touch_ratio(mask, threshold=0.34)
-        if border_touch_ratio < 0.10:
+        if border_touch_ratio < 0.10 and not is_rembg:
             mask = _refine_mask_with_grabcut(denoised, mask)
         mask = _guided_refine_mask(denoised, mask)
 
         # Contract uncertain matte fringe so soft wall shadows are less likely to be
         # preserved as pseudo-foreground around the silhouette.
-        contract = 0.22 if border_touch_ratio < 0.06 else 0.17
-        scale = 0.70 if border_touch_ratio < 0.06 else 0.76
+        # rembg masks are precise — use minimal contraction to avoid clipping fine edge details.
+        if is_rembg:
+            contract = 0.04 if border_touch_ratio < 0.06 else 0.02
+            scale = 0.94 if border_touch_ratio < 0.06 else 0.96
+        else:
+            contract = 0.22 if border_touch_ratio < 0.06 else 0.17
+            scale = 0.70 if border_touch_ratio < 0.06 else 0.76
         subject_core = (mask > 0.86).astype(np.float32)
         subject_core = cv2.GaussianBlur(subject_core, (0, 0), 0.8)
         mask = np.clip((mask - contract) / scale, 0.0, 1.0)
@@ -616,9 +640,14 @@ def enhance_image(
         bg_adjusted = bg_adjusted * (1.0 - bg_ring_3) + white_target * bg_ring_3
 
         # Narrow subject blend keeps natural edges but avoids preserving a dark ring.
-        mask_keep = np.clip((mask - 0.46) / 0.44, 0.0, 1.0)
+        # rembg produces sharp masks — use a tighter blend range and smaller blur so the
+        # subject edge is crisp rather than soft/glowing.
+        if is_rembg:
+            mask_keep = np.clip((mask - 0.30) / 0.55, 0.0, 1.0)
+        else:
+            mask_keep = np.clip((mask - 0.46) / 0.44, 0.0, 1.0)
         mask_keep = np.clip(np.maximum(mask_keep, subject_core * 0.995), 0.0, 1.0)
-        edge_soft = cv2.GaussianBlur(mask_keep, (0, 0), 0.95)
+        edge_soft = cv2.GaussianBlur(mask_keep, (0, 0), 0.45 if is_rembg else 0.95)
         edge_soft_3 = np.repeat(edge_soft[:, :, None], 3, axis=2)
         denoised = (fg * edge_soft_3 + bg_adjusted * (1.0 - edge_soft_3)).clip(0, 255).astype(np.uint8)
 

@@ -1199,6 +1199,7 @@ class PhotoCompliancePipeline:
                             beauty_mode=apply_mode,
                             face_box=padded_face_box,
                             shadow_mode="aggressive",
+                            seg_backend=segmentation_used,
                         )
                         processed_assist = processed_assist[
                             pad : (pad + output_size[1]),
