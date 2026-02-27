@@ -27,6 +27,14 @@ try:
 except Exception:  # pragma: no cover
     mp = None
 
+try:
+    from PIL import Image as _PILImage
+    from rembg import new_session as _rembg_new_session, remove as _rembg_remove
+except Exception:  # pragma: no cover
+    _PILImage = None
+    _rembg_new_session = None
+    _rembg_remove = None
+
 
 
 EAR_LEFT_IDX = [33, 160, 158, 133, 153, 144]
@@ -53,6 +61,8 @@ class PhotoCompliancePipeline:
     def __init__(self) -> None:
         self.face_mesh = None
         self.segmentation_mediapipe = None
+        self.rembg_session = None
+
         if mp is not None:
             try:
                 self.face_mesh = mp.solutions.face_mesh.FaceMesh(
@@ -67,6 +77,14 @@ class PhotoCompliancePipeline:
                 self.segmentation_mediapipe = mp.solutions.selfie_segmentation.SelfieSegmentation(model_selection=1)
             except Exception:
                 self.segmentation_mediapipe = None
+
+        if _rembg_new_session is not None:
+            try:
+                # u2net_human_seg: purpose-trained for human segmentation (~170MB).
+                # Handles messy/complex backgrounds much better than MediaPipe.
+                self.rembg_session = _rembg_new_session("u2net_human_seg")
+            except Exception:
+                self.rembg_session = None
 
     def _resize_long_side(self, bgr_image: np.ndarray, max_long_side: int) -> tuple[np.ndarray, float]:
         h, w = bgr_image.shape[:2]
@@ -168,15 +186,32 @@ class PhotoCompliancePipeline:
             return None
         return result.segmentation_mask.astype(np.float32)
 
+    def _segment_person_rembg(self, bgr_image: np.ndarray) -> np.ndarray | None:
+        if self.rembg_session is None or _rembg_remove is None or _PILImage is None:
+            return None
+        try:
+            rgb = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2RGB)
+            pil_img = _PILImage.fromarray(rgb)
+            result = _rembg_remove(pil_img, session=self.rembg_session, only_mask=True)
+            mask = np.asarray(result).astype(np.float32) / 255.0
+            if mask.ndim == 3:
+                mask = mask[:, :, 0]
+            return mask
+        except Exception:
+            return None
+
     def _segment_person(
         self,
         bgr_image: np.ndarray,
-        backend: str = "mediapipe",
     ) -> tuple[np.ndarray | None, str, str | None]:
+        # rembg (u2net_human_seg) handles complex/messy backgrounds better than MediaPipe.
+        mask = self._segment_person_rembg(bgr_image)
+        if mask is not None:
+            return mask, "rembg", None
         mask = self._segment_person_mediapipe(bgr_image)
         if mask is not None:
             return mask, "mediapipe", None
-        return None, "none", "MediaPipe segmentation unavailable."
+        return None, "none", "Segmentation unavailable (rembg and MediaPipe both failed)."
 
     def _compute_crop(
         self,
