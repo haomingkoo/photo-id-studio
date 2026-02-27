@@ -581,10 +581,10 @@ def enhance_image(
         sat_norm = cv2.cvtColor(fg.astype(np.uint8), cv2.COLOR_BGR2HSV)[:, :, 1].astype(np.float32) / 255.0
         edge_zone = np.clip(1.0 - np.abs(mask - 0.5) * 2.6, 0.0, 1.0)
         protect = np.clip((sat_norm - 0.30) * 1.6, 0.0, 1.0) * edge_zone
-        white_mix = np.clip(white_mix * (1.0 - protect * 0.75), 0.0, 0.95)
-        white_mix = np.clip(white_mix * (1.0 - edge_guard * 0.24), 0.0, 0.95)
-        white_mix = np.clip(white_mix * (1.0 - border_subject * 0.30), 0.0, 0.95)
-        white_mix = np.clip(white_mix * bg_edit_gate, 0.0, 0.95)
+        white_mix = np.clip(white_mix * (1.0 - protect * 0.75), 0.0, 0.98)
+        white_mix = np.clip(white_mix * (1.0 - edge_guard * 0.24), 0.0, 0.98)
+        white_mix = np.clip(white_mix * (1.0 - border_subject * 0.30), 0.0, 0.98)
+        white_mix = np.clip(white_mix * bg_edit_gate, 0.0, 0.98)
 
         if is_flat_bg and (not is_clean_bg):
             # Flat wall: push closer to clean white and flatten cast/shadows more.
@@ -602,6 +602,12 @@ def enhance_image(
 
         white_mix_3 = np.repeat(np.clip(white_mix[:, :, None], 0.0, 1.0), 3, axis=2)
         bg_adjusted = bg_adjusted * (1.0 - white_mix_3) + white_target * white_mix_3
+
+        # Hard-override: force confident background pixels to pure white regardless of original color.
+        # This ensures any non-white background (tan, gray, colored wall, etc.) is fully replaced.
+        # The ramp preserves soft blending at the subject edge (bg_alpha < 0.55 = transition zone).
+        hard_bg_3 = np.repeat(np.clip((bg_alpha - 0.55) / 0.30, 0.0, 1.0)[:, :, None], 3, axis=2)
+        bg_adjusted = bg_adjusted * (1.0 - hard_bg_3) + white_target * hard_bg_3
 
         # Flatten the immediate background-side ring so a residual shadow does not read as halo.
         bg_ring = np.clip(cv2.GaussianBlur(subject_core, (0, 0), 1.8) - subject_core, 0.0, 1.0)
