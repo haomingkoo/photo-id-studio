@@ -219,10 +219,10 @@ def _refine_mask_with_grabcut(bgr_image: np.ndarray, soft_mask: np.ndarray) -> n
 
     try:
         gc_mask = np.full((h, w), cv2.GC_PR_BGD, dtype=np.uint8)
-        gc_mask[soft_mask < 0.08] = cv2.GC_BGD
-        gc_mask[(soft_mask >= 0.08) & (soft_mask < 0.52)] = cv2.GC_PR_BGD
-        gc_mask[(soft_mask >= 0.52) & (soft_mask < 0.90)] = cv2.GC_PR_FGD
-        gc_mask[soft_mask >= 0.90] = cv2.GC_FGD
+        gc_mask[soft_mask < 0.10] = cv2.GC_BGD
+        gc_mask[(soft_mask >= 0.10) & (soft_mask < 0.60)] = cv2.GC_PR_BGD
+        gc_mask[(soft_mask >= 0.60) & (soft_mask < 0.92)] = cv2.GC_PR_FGD
+        gc_mask[soft_mask >= 0.92] = cv2.GC_FGD
 
         bgd_model = np.zeros((1, 65), np.float64)
         fgd_model = np.zeros((1, 65), np.float64)
@@ -242,7 +242,7 @@ def _refine_mask_with_grabcut(bgr_image: np.ndarray, soft_mask: np.ndarray) -> n
             0.0,
         ).astype(np.float32)
         refined_fg = cv2.GaussianBlur(refined_fg, (0, 0), 1.1)
-        blended = np.clip(soft_mask * 0.58 + refined_fg * 0.42, 0.0, 1.0)
+        blended = np.clip(soft_mask * 0.50 + refined_fg * 0.50, 0.0, 1.0)
         return blended
     except Exception:
         return soft_mask
@@ -430,12 +430,12 @@ def enhance_image(
     face_box: tuple[int, int, int, int] | None = None,
     shadow_mode: str = "balanced",
 ) -> np.ndarray:
-    # Mild local contrast enhancement blended with original to avoid over-processing skin tones.
+    # Local contrast enhancement blended with original to boost face clarity without over-processing.
     lab = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2LAB)
     l, a, b = cv2.split(lab)
-    clahe = cv2.createCLAHE(clipLimit=1.15, tileGridSize=(12, 12))
+    clahe = cv2.createCLAHE(clipLimit=1.8, tileGridSize=(10, 10))
     l_enhanced = clahe.apply(l)
-    l_blended = cv2.addWeighted(l_enhanced, 0.24, l, 0.76, 0)
+    l_blended = cv2.addWeighted(l_enhanced, 0.34, l, 0.66, 0)
     enhanced = cv2.cvtColor(cv2.merge((l_blended, a, b)), cv2.COLOR_LAB2BGR)
 
     # Gentle denoise for grainy mobile images.
@@ -481,8 +481,8 @@ def enhance_image(
 
         # Contract uncertain matte fringe so soft wall shadows are less likely to be
         # preserved as pseudo-foreground around the silhouette.
-        contract = 0.17 if border_touch_ratio < 0.06 else 0.13
-        scale = 0.78 if border_touch_ratio < 0.06 else 0.84
+        contract = 0.22 if border_touch_ratio < 0.06 else 0.17
+        scale = 0.70 if border_touch_ratio < 0.06 else 0.76
         subject_core = (mask > 0.86).astype(np.float32)
         subject_core = cv2.GaussianBlur(subject_core, (0, 0), 0.8)
         mask = np.clip((mask - contract) / scale, 0.0, 1.0)
@@ -522,7 +522,7 @@ def enhance_image(
 
         shadow_mode_norm = (shadow_mode or "balanced").strip().lower()
         aggressive_shadow = shadow_mode_norm in {"aggressive", "strong", "high"}
-        shadow_gain = 1.34 if aggressive_shadow else 1.0
+        shadow_gain = 1.60 if aggressive_shadow else 1.10
 
         # Reduce color spill around hair and neckline by decontaminating transition pixels.
         alpha3 = np.repeat(mask[:, :, None], 3, axis=2)
@@ -551,19 +551,19 @@ def enhance_image(
         h, s, v = cv2.split(hsv)
 
         # Nudge background toward white and flatten wall shadows.
-        v = v + (bg_strength * (18.0 if is_clean_bg else 30.0) * shadow_gain)
-        bg_ref = float(np.percentile(v[bg_confident], 82)) if int(bg_confident.sum()) > 40 else 218.0
-        shadow_lift = np.clip(bg_ref - v, 0.0, 130.0)
-        v = v + (shadow_lift * bg_strength * (0.26 if is_clean_bg else 0.40) * shadow_gain)
-        s = s * (1.0 - (bg_strength * (0.30 if is_clean_bg else 0.46)))
+        v = v + (bg_strength * (22.0 if is_clean_bg else 38.0) * shadow_gain)
+        bg_ref = float(np.percentile(v[bg_confident], 85)) if int(bg_confident.sum()) > 40 else 225.0
+        shadow_lift = np.clip(bg_ref - v, 0.0, 150.0)
+        v = v + (shadow_lift * bg_strength * (0.34 if is_clean_bg else 0.54) * shadow_gain)
+        s = s * (1.0 - (bg_strength * (0.40 if is_clean_bg else 0.60)))
 
         if aggressive_shadow:
             # Additional low-frequency background equalization for stronger wall shadow cleanup.
             v_blur = cv2.GaussianBlur(v, (0, 0), 18.0)
-            ref_hi = float(np.percentile(v[bg_confident], 90)) if int(bg_confident.sum()) > 40 else 232.0
-            flatten_lift = np.clip(ref_hi - v_blur, 0.0, 72.0)
-            v = np.clip(v + flatten_lift * bg_alpha * bg_edit_gate * 0.40, 0.0, 255.0)
-            s = s * (1.0 - (bg_alpha * bg_edit_gate * 0.08))
+            ref_hi = float(np.percentile(v[bg_confident], 92)) if int(bg_confident.sum()) > 40 else 238.0
+            flatten_lift = np.clip(ref_hi - v_blur, 0.0, 90.0)
+            v = np.clip(v + flatten_lift * bg_alpha * bg_edit_gate * 0.58, 0.0, 255.0)
+            s = s * (1.0 - (bg_alpha * bg_edit_gate * 0.14))
 
         hsv_bg = cv2.merge((h, np.clip(s, 0, 255), np.clip(v, 0, 255))).astype(np.uint8)
         bg_adjusted = cv2.cvtColor(hsv_bg, cv2.COLOR_HSV2BGR).astype(np.float32)
@@ -571,10 +571,10 @@ def enhance_image(
         bg_dist = np.linalg.norm(fg - bg_color_3, axis=2)
         bg_like = np.clip(1.0 - (bg_dist / 68.0), 0.0, 1.0)
         white_mix = np.clip(
-            np.power(bg_alpha, 1.16) * (0.52 + (0.08 if aggressive_shadow else 0.0))
-            + (bg_like * bg_alpha * (0.16 + (0.03 if aggressive_shadow else 0.0))),
+            np.power(bg_alpha, 1.04) * (0.70 + (0.14 if aggressive_shadow else 0.0))
+            + (bg_like * bg_alpha * (0.22 + (0.06 if aggressive_shadow else 0.0))),
             0.0,
-            0.95,
+            0.98,
         )
 
         # Do not bleach saturated/textured transition regions (often clothes or hairline details).
@@ -589,14 +589,14 @@ def enhance_image(
         if is_flat_bg and (not is_clean_bg):
             # Flat wall: push closer to clean white and flatten cast/shadows more.
             flat_like = np.clip(1.0 - (bg_dist / 52.0), 0.0, 1.0) * bg_alpha * bg_edit_gate
-            white_mix = np.clip(white_mix + flat_like * (0.20 if not aggressive_shadow else 0.30), 0.0, 0.995)
+            white_mix = np.clip(white_mix + flat_like * (0.28 if not aggressive_shadow else 0.42), 0.0, 0.998)
             if int(bg_confident.sum()) > 40:
                 v_ref_hi = float(np.percentile(v[bg_confident], 90))
             else:
                 v_ref_hi = 230.0
-            extra_shadow = np.clip(v_ref_hi - v, 0.0, 140.0)
-            v = np.clip(v + (extra_shadow * flat_like * (0.50 if not aggressive_shadow else 0.72)), 0.0, 255.0)
-            s = s * (1.0 - (flat_like * 0.26))
+            extra_shadow = np.clip(v_ref_hi - v, 0.0, 160.0)
+            v = np.clip(v + (extra_shadow * flat_like * (0.62 if not aggressive_shadow else 0.88)), 0.0, 255.0)
+            s = s * (1.0 - (flat_like * 0.34))
             hsv_bg = cv2.merge((h, np.clip(s, 0, 255), np.clip(v, 0, 255))).astype(np.uint8)
             bg_adjusted = cv2.cvtColor(hsv_bg, cv2.COLOR_HSV2BGR).astype(np.float32)
 
@@ -606,11 +606,11 @@ def enhance_image(
         # Flatten the immediate background-side ring so a residual shadow does not read as halo.
         bg_ring = np.clip(cv2.GaussianBlur(subject_core, (0, 0), 1.8) - subject_core, 0.0, 1.0)
         bg_ring = np.clip(bg_ring * bg_alpha, 0.0, 1.0)
-        bg_ring_3 = np.repeat((bg_ring * 0.42)[:, :, None], 3, axis=2)
+        bg_ring_3 = np.repeat((bg_ring * 0.65)[:, :, None], 3, axis=2)
         bg_adjusted = bg_adjusted * (1.0 - bg_ring_3) + white_target * bg_ring_3
 
         # Narrow subject blend keeps natural edges but avoids preserving a dark ring.
-        mask_keep = np.clip((mask - 0.40) / 0.52, 0.0, 1.0)
+        mask_keep = np.clip((mask - 0.46) / 0.44, 0.0, 1.0)
         mask_keep = np.clip(np.maximum(mask_keep, subject_core * 0.995), 0.0, 1.0)
         edge_soft = cv2.GaussianBlur(mask_keep, (0, 0), 0.95)
         edge_soft_3 = np.repeat(edge_soft[:, :, None], 3, axis=2)
