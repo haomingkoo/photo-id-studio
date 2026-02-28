@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from io import BytesIO
+import os
 from typing import Any
 
 import cv2
@@ -25,12 +26,24 @@ DATETIME_ORIGINAL_TAG = EXIF_TAG_MAP.get("DateTimeOriginal", 36867)
 DATETIME_TAG = EXIF_TAG_MAP.get("DateTime", 306)
 MIRRORED_ORIENTATION_VALUES = {2, 4, 5, 7}
 HEIC_EXTENSIONS = {"heic", "heif"}
+MAX_DECODE_MEGAPIXELS = max(1.0, float(os.getenv("PHOTO_API_MAX_DECODE_MEGAPIXELS", "36")))
+MAX_DECODE_PIXELS = int(MAX_DECODE_MEGAPIXELS * 1_000_000)
+Image.MAX_IMAGE_PIXELS = MAX_DECODE_PIXELS
 
 
 @dataclass
 class DecodedImage:
     bgr: np.ndarray
     metadata: dict[str, Any]
+
+
+def _enforce_decode_pixel_limit(width: int, height: int) -> None:
+    total_pixels = int(width) * int(height)
+    if total_pixels > MAX_DECODE_PIXELS:
+        raise ValueError(
+            "Image resolution is too large to process safely. "
+            f"Maximum decode limit is {MAX_DECODE_MEGAPIXELS:.0f} megapixels."
+        )
 
 
 
@@ -55,6 +68,7 @@ def decode_image_bytes(file_bytes: bytes, extension: str | None = None) -> Decod
 
     try:
         pil_img = Image.open(BytesIO(file_bytes))
+        _enforce_decode_pixel_limit(*pil_img.size)
         exif = pil_img.getexif() if hasattr(pil_img, "getexif") else None
 
         if exif:
@@ -72,6 +86,13 @@ def decode_image_bytes(file_bytes: bytes, extension: str | None = None) -> Decod
         rgb = np.asarray(pil_img)
         bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
         return DecodedImage(bgr=bgr, metadata=metadata)
+    except Image.DecompressionBombError as exc:
+        raise ValueError(
+            "Image resolution is too large to process safely. "
+            f"Maximum decode limit is {MAX_DECODE_MEGAPIXELS:.0f} megapixels."
+        ) from exc
+    except ValueError:
+        raise
     except Exception:
         pass
 
@@ -84,6 +105,7 @@ def decode_image_bytes(file_bytes: bytes, extension: str | None = None) -> Decod
                 "Unable to decode HEIC/HEIF image. Missing HEIC codec support. Install 'pillow-heif' and retry."
             )
         raise ValueError("Unable to decode image. Please upload a valid JPG/PNG/HEIC image.")
+    _enforce_decode_pixel_limit(bgr.shape[1], bgr.shape[0])
     return DecodedImage(bgr=bgr, metadata=metadata)
 
 

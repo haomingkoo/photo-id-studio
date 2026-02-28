@@ -135,6 +135,9 @@ RATE_PER_MIN = max(1, int(os.getenv("PHOTO_API_RATE_PER_MIN", "10")))
 RATE_BURST = max(1, int(os.getenv("PHOTO_API_BURST", "20")))
 DAILY_LIMIT = max(1, int(os.getenv("PHOTO_API_DAILY_LIMIT", "200")))
 MAX_INFLIGHT_ANALYZE = max(1, int(os.getenv("PHOTO_API_MAX_INFLIGHT", "3")))
+MAX_UPLOAD_MB = max(1.0, float(os.getenv("PHOTO_API_MAX_UPLOAD_MB", "20")))
+MAX_UPLOAD_BYTES = int(MAX_UPLOAD_MB * 1024 * 1024)
+UPLOAD_READ_CHUNK_BYTES = max(64 * 1024, int(os.getenv("PHOTO_API_UPLOAD_CHUNK_BYTES", str(1024 * 1024))))
 TRUST_X_FORWARDED_FOR = os.getenv("PHOTO_API_TRUST_XFF", "1").strip().lower() in {
     "1",
     "true",
@@ -164,6 +167,33 @@ def _set_limit_headers(response: Response | JSONResponse, decision: _RateDecisio
     response.headers["X-RateLimit-Limit-Day"] = str(RATE_LIMITER.daily_limit)
     response.headers["X-RateLimit-Remaining-Day"] = str(max(0, decision.daily_remaining))
     response.headers["X-InFlight-Limit"] = str(MAX_INFLIGHT_ANALYZE)
+
+
+def _content_length_exceeds_limit(request: Request, max_bytes: int) -> bool:
+    header = request.headers.get("content-length")
+    if not header:
+        return False
+    try:
+        return int(header) > max_bytes
+    except ValueError:
+        return False
+
+
+async def _read_upload_with_limit(photo: UploadFile, max_bytes: int, chunk_size: int) -> bytes:
+    chunks = bytearray()
+    total_bytes = 0
+    while True:
+        chunk = await photo.read(chunk_size)
+        if not chunk:
+            break
+        total_bytes += len(chunk)
+        if total_bytes > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Uploaded file is too large. Hard limit is {MAX_UPLOAD_MB:.0f}MB.",
+            )
+        chunks.extend(chunk)
+    return bytes(chunks)
 
 
 @app.get("/api/health")
@@ -240,16 +270,24 @@ async def analyze(
 
     _set_limit_headers(response, decision)
 
-    if photo.content_type is None or not photo.content_type.startswith("image/"):
-        INFLIGHT_ANALYZE_GUARD.release()
-        raise HTTPException(status_code=400, detail="Please upload a valid image file.")
-
-    file_bytes = await photo.read()
-    if not file_bytes:
-        INFLIGHT_ANALYZE_GUARD.release()
-        raise HTTPException(status_code=400, detail="Uploaded image is empty.")
-
     try:
+        if _content_length_exceeds_limit(request, MAX_UPLOAD_BYTES):
+            raise HTTPException(
+                status_code=413,
+                detail=f"Request body is too large. Hard limit is {MAX_UPLOAD_MB:.0f}MB.",
+            )
+
+        if photo.content_type is None or not photo.content_type.startswith("image/"):
+            raise HTTPException(status_code=400, detail="Please upload a valid image file.")
+
+        file_bytes = await _read_upload_with_limit(
+            photo,
+            max_bytes=MAX_UPLOAD_BYTES,
+            chunk_size=UPLOAD_READ_CHUNK_BYTES,
+        )
+        if not file_bytes:
+            raise HTTPException(status_code=400, detail="Uploaded image is empty.")
+
         report, processed_b64, original_b64, comparison_no_corr_b64, comparison_color_corr_b64 = pipeline.analyze(
             file_bytes=file_bytes,
             filename=photo.filename or "upload.jpg",
@@ -257,12 +295,15 @@ async def analyze(
             mode=mode,
             beauty_mode=beauty_mode,
         )
+    except HTTPException:
+        raise
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # pragma: no cover
         LOG.exception("analyze_failed ip=%s filename=%s", client_ip, photo.filename or "upload.jpg")
         return JSONResponse(status_code=500, content={"error": "analysis_failed", "detail": "Internal error"})
     finally:
+        await photo.close()
         INFLIGHT_ANALYZE_GUARD.release()
 
     return AnalyzeResponse(
