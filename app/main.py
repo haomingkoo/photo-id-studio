@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import ipaddress
 import logging
 import math
 import os
@@ -23,15 +24,25 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 WEB_DIR = BASE_DIR / "web"
 LOG = logging.getLogger("photo_id_studio.api")
 
+
+def _split_csv_env(name: str) -> list[str]:
+    raw = os.getenv(name, "")
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+ALLOWED_ORIGINS = _split_csv_env("PHOTO_API_ALLOWED_ORIGINS")
+TRUSTED_PROXY_IPS = set(_split_csv_env("PHOTO_API_TRUSTED_PROXY_IPS"))
+
 app = FastAPI(title="Photo ID Compliance Studio", version="0.1.0")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+if ALLOWED_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=ALLOWED_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["*"],
+    )
 
 pipeline = PhotoCompliancePipeline()
 
@@ -138,7 +149,7 @@ MAX_INFLIGHT_ANALYZE = max(1, int(os.getenv("PHOTO_API_MAX_INFLIGHT", "3")))
 MAX_UPLOAD_MB = max(1.0, float(os.getenv("PHOTO_API_MAX_UPLOAD_MB", "20")))
 MAX_UPLOAD_BYTES = int(MAX_UPLOAD_MB * 1024 * 1024)
 UPLOAD_READ_CHUNK_BYTES = max(64 * 1024, int(os.getenv("PHOTO_API_UPLOAD_CHUNK_BYTES", str(1024 * 1024))))
-TRUST_X_FORWARDED_FOR = os.getenv("PHOTO_API_TRUST_XFF", "1").strip().lower() in {
+TRUST_X_FORWARDED_FOR = os.getenv("PHOTO_API_TRUST_XFF", "0").strip().lower() in {
     "1",
     "true",
     "yes",
@@ -150,15 +161,33 @@ INFLIGHT_ANALYZE_GUARD = threading.BoundedSemaphore(MAX_INFLIGHT_ANALYZE)
 
 
 def _resolve_client_ip(request: Request) -> str:
-    if TRUST_X_FORWARDED_FOR:
+    if TRUST_X_FORWARDED_FOR and _request_came_through_trusted_proxy(request):
         xff = request.headers.get("x-forwarded-for", "")
         if xff:
-            first = xff.split(",")[0].strip()
-            if first:
-                return first
+            forwarded_ip = _parse_forwarded_ip(xff)
+            if forwarded_ip:
+                return forwarded_ip
     if request.client and request.client.host:
         return request.client.host
     return "unknown"
+
+
+def _request_came_through_trusted_proxy(request: Request) -> bool:
+    if request.client is None or not request.client.host:
+        return False
+    if not TRUSTED_PROXY_IPS:
+        return True
+    return request.client.host in TRUSTED_PROXY_IPS
+
+
+def _parse_forwarded_ip(xff_header: str) -> str | None:
+    first = xff_header.split(",")[0].strip()
+    if not first:
+        return None
+    try:
+        return str(ipaddress.ip_address(first))
+    except ValueError:
+        return None
 
 
 def _set_limit_headers(response: Response | JSONResponse, decision: _RateDecision) -> None:

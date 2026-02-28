@@ -139,9 +139,11 @@ For low-cost deployment, use these environment variables:
 5. `PHOTO_API_BURST=20`
 6. `PHOTO_API_DAILY_LIMIT=200`
 7. `PHOTO_API_MAX_INFLIGHT=3`
-8. `PHOTO_API_TRUST_XFF=1`
+8. `PHOTO_API_TRUST_XFF=0`
 9. `PHOTO_API_MAX_UPLOAD_MB=20`
 10. `PHOTO_API_MAX_DECODE_MEGAPIXELS=36`
+11. `PHOTO_API_ALLOWED_ORIGINS=`
+12. `PHOTO_API_TRUSTED_PROXY_IPS=`
 
 What this does:
 
@@ -152,6 +154,8 @@ What this does:
 5. Throttles repeated API calls per IP while still allowing large-image uploads.
 6. Rejects requests quickly when in-flight analysis workers are saturated.
 7. Allows typical high-resolution phone photos while rejecting oversized request bodies and extreme pixel-count images.
+8. Keeps browser CORS closed by default unless you explicitly allow cross-origin frontend hosts.
+9. Keeps `X-Forwarded-For` disabled by default unless you explicitly trust your proxy setup.
 
 ## Deploy Online (Railway)
 
@@ -174,9 +178,11 @@ This repo is now deployment-ready with:
    - `PHOTO_API_BURST=20`
    - `PHOTO_API_DAILY_LIMIT=200`
    - `PHOTO_API_MAX_INFLIGHT=3`
-   - `PHOTO_API_TRUST_XFF=1`
+   - `PHOTO_API_TRUST_XFF=0`
    - `PHOTO_API_MAX_UPLOAD_MB=20`
    - `PHOTO_API_MAX_DECODE_MEGAPIXELS=36`
+   - `PHOTO_API_ALLOWED_ORIGINS=https://your-frontend.example.com`
+   - `PHOTO_API_TRUSTED_PROXY_IPS=`
 5. Healthcheck path:
    - `/api/health`
 

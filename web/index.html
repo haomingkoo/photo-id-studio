@@ -429,7 +429,7 @@
 <body>
   <div class="container">
     <nav>
-      <a class="nav-logo" href="/">HK</a>
+      <a class="nav-logo" href="https://kooexperience.com/">HK</a>
       <div class="nav-links">
         <a href="https://kooexperience.com" target="_blank" rel="noopener">Home</a>
         <a href="https://github.com/haomingkoo" target="_blank" rel="noopener">GitHub</a>
@@ -777,6 +777,73 @@
       return 'check-manual';
     }
 
+    function clearChildren(node) {
+      node.replaceChildren();
+    }
+
+    function appendText(parent, text) {
+      parent.appendChild(document.createTextNode(text));
+    }
+
+    function createChip(label, value) {
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+
+      const strong = document.createElement('strong');
+      strong.textContent = `${label}:`;
+      chip.appendChild(strong);
+      appendText(chip, ' ');
+
+      if (typeof value === 'string') {
+        appendText(chip, value);
+      } else {
+        chip.appendChild(value);
+      }
+      return chip;
+    }
+
+    function renderSummaryChips(report) {
+      clearChildren(summaryChips);
+
+      const statusLabel = report.overall_status.toUpperCase();
+      const statusClassName = report.overall_status === 'pass'
+        ? 'status-pass'
+        : (report.overall_status === 'fail' ? 'status-fail' : 'status-review');
+      const statusPill = document.createElement('span');
+      statusPill.className = `status-pill ${statusClassName}`;
+      statusPill.textContent = statusLabel;
+
+      summaryChips.appendChild(createChip('Status', statusPill));
+      summaryChips.appendChild(createChip('Resolution', `${report.width}x${report.height}`));
+      summaryChips.appendChild(createChip('Segmentation', report.segmentation_backend || 'N/A'));
+      summaryChips.appendChild(
+        createChip('Error Codes', report.error_codes.length ? report.error_codes.join(', ') : 'None')
+      );
+    }
+
+    function appendCheckRow(check) {
+      const row = document.createElement('tr');
+
+      const codeCell = document.createElement('td');
+      codeCell.textContent = check.code;
+      row.appendChild(codeCell);
+
+      const statusCell = document.createElement('td');
+      statusCell.className = statusClass(check.status);
+      statusCell.textContent = check.status.toUpperCase();
+      row.appendChild(statusCell);
+
+      const messageCell = document.createElement('td');
+      messageCell.textContent = check.message;
+      row.appendChild(messageCell);
+
+      const actionCell = document.createElement('td');
+      actionCell.textContent = check.action;
+      row.appendChild(actionCell);
+
+      checksBody.appendChild(row);
+    }
+
     function renderProfileHint(code) {
       const profile = countryData.find(item => item.code === code);
       if (!profile) {
@@ -789,7 +856,7 @@
     async function loadCountries() {
       const response = await fetch('/api/countries');
       countryData = await response.json();
-      countrySelect.innerHTML = '';
+      clearChildren(countrySelect);
       countryData.forEach(item => {
         const option = document.createElement('option');
         option.value = item.code;
@@ -843,29 +910,12 @@
         if (payload.original_image_base64) {
           originalPreview.src = `data:${payload.original_image_mime || 'image/jpeg'};base64,${payload.original_image_base64}`;
         }
-        const statusLabel = report.overall_status.toUpperCase();
-        const statusClassName = report.overall_status === 'pass' ? 'status-pass' : (report.overall_status === 'fail' ? 'status-fail' : 'status-review');
+        renderSummaryChips(report);
 
-        summaryChips.innerHTML = `
-          <span class="chip"><strong>Status:</strong> <span class="status-pill ${statusClassName}">${statusLabel}</span></span>
-          <span class="chip"><strong>Resolution:</strong> ${report.width}x${report.height}</span>
-          <span class="chip"><strong>Segmentation:</strong> ${report.segmentation_backend || 'N/A'}</span>
-          <span class="chip"><strong>Error Codes:</strong> ${report.error_codes.length ? report.error_codes.join(', ') : 'None'}</span>
-        `;
+        clearChildren(checksBody);
+        report.checks.forEach(appendCheckRow);
 
-        checksBody.innerHTML = '';
-        report.checks.forEach(check => {
-          const row = document.createElement('tr');
-          row.innerHTML = `
-            <td>${check.code}</td>
-            <td class="${statusClass(check.status)}">${check.status.toUpperCase()}</td>
-            <td>${check.message}</td>
-            <td>${check.action}</td>
-          `;
-          checksBody.appendChild(row);
-        });
-
-        actionList.innerHTML = '';
+        clearChildren(actionList);
         if (report.actions && report.actions.length) {
           report.actions.forEach(action => {
             const li = document.createElement('li');
