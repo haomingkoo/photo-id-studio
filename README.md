@@ -140,6 +140,8 @@ For low-cost deployment, use these environment variables:
 6. `PHOTO_API_DAILY_LIMIT=200`
 7. `PHOTO_API_MAX_INFLIGHT=3`
 8. `PHOTO_API_TRUST_XFF=1`
+9. `PHOTO_API_MAX_UPLOAD_MB=20`
+10. `PHOTO_API_MAX_DECODE_MEGAPIXELS=36`
 
 What this does:
 
@@ -149,6 +151,7 @@ What this does:
 4. Keeps output deterministic without generative shoulder/background replacement.
 5. Throttles repeated API calls per IP while still allowing large-image uploads.
 6. Rejects requests quickly when in-flight analysis workers are saturated.
+7. Allows typical high-resolution phone photos while rejecting oversized request bodies and extreme pixel-count images.
 
 ## Deploy Online (Railway)
 
@@ -172,6 +175,8 @@ This repo is now deployment-ready with:
    - `PHOTO_API_DAILY_LIMIT=200`
    - `PHOTO_API_MAX_INFLIGHT=3`
    - `PHOTO_API_TRUST_XFF=1`
+   - `PHOTO_API_MAX_UPLOAD_MB=20`
+   - `PHOTO_API_MAX_DECODE_MEGAPIXELS=36`
 5. Healthcheck path:
    - `/api/health`
 
