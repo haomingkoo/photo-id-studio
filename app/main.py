@@ -299,6 +299,7 @@ class _AnalyzeTelemetry:
         country_code: str,
         mode: str,
         beauty_mode: str,
+        mirror_mode: str,
         upload_bytes: int,
         overall_status: str | None,
         segmentation_backend: str | None,
@@ -314,6 +315,7 @@ class _AnalyzeTelemetry:
             "country_code": (country_code or "").strip().upper(),
             "mode": (mode or "").strip().lower(),
             "beauty_mode": (beauty_mode or "").strip().lower(),
+            "mirror_mode": (mirror_mode or "auto").strip().lower(),
             "upload_bytes": int(upload_bytes),
             "overall_status": overall_status or "unknown",
             "segmentation_backend": segmentation_backend or "unknown",
@@ -766,6 +768,7 @@ async def analyze(
     country_code: str = Form("SG"),
     mode: str = Form("assist"),
     beauty_mode: str = Form("none"),
+    mirror_mode: str = Form("auto"),
 ) -> AnalyzeResponse:
     client_ip = _resolve_client_ip(request)
     decision = RATE_LIMITER.check(client_ip)
@@ -836,6 +839,7 @@ async def analyze(
             country_code=country_code,
             mode=mode,
             beauty_mode=beauty_mode,
+            mirror_mode=mirror_mode,
         )
     except HTTPException as exc:
         outcome = "http_error"
@@ -864,6 +868,7 @@ async def analyze(
             country_code=country_code,
             mode=mode,
             beauty_mode=beauty_mode,
+            mirror_mode=mirror_mode,
             upload_bytes=upload_bytes,
             overall_status=getattr(report, "overall_status", None),
             segmentation_backend=getattr(report, "segmentation_backend", None),
@@ -877,7 +882,7 @@ async def analyze(
             if isinstance(rss_before, float) and isinstance(rss_after, float):
                 rss_delta = round(rss_after - rss_before, 2)
             LOG.info(
-                "analyze_metrics ip=%s status=%s outcome=%s error_kind=%s country=%s mode=%s beauty_mode=%s "
+                "analyze_metrics ip=%s status=%s outcome=%s error_kind=%s country=%s mode=%s beauty_mode=%s mirror_mode=%s "
                 "upload_bytes=%s original_b64_bytes=%s processed_b64_bytes=%s cmp_no_corr_b64_bytes=%s "
                 "cmp_color_corr_b64_bytes=%s overall_status=%s segmentation_backend=%s elapsed_ms=%s "
                 "rss_before_mb=%s rss_after_mb=%s rss_delta_mb=%s hwm_after_mb=%s maxrss_after_mb=%s "
@@ -889,6 +894,7 @@ async def analyze(
                 country_code,
                 mode,
                 beauty_mode,
+                mirror_mode,
                 upload_bytes,
                 len(original_b64 or ""),
                 len(processed_b64 or ""),

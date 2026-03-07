@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.1] - 2026-03-07
+
+### Added
+1. Mirror handling request mode (`auto`, `unmirror`, `keep`) for `/api/analyze`.
+2. Mirror-result checks surfaced in report output (`MIRROR_CORRECTION_APPLIED`, `MIRROR_ADJUSTMENT_APPLIED`).
+3. Frontend control for selfie mirror handling plus mirror-status summary chip.
+
+### Changed
+1. Decode pipeline now supports deterministic pre-analysis unmirror correction.
+2. README includes iPhone mirrored selfie troubleshooting guidance.
+
 ## [0.3.0] - 2026-03-07
 
 ### Added

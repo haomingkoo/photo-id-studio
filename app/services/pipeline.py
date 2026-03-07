@@ -505,6 +505,7 @@ class PhotoCompliancePipeline:
         country_code: str,
         mode: str,
         beauty_mode: str = "none",
+        mirror_mode: str = "auto",
     ) -> tuple[AnalysisReport, str | None, str | None, str | None, str | None]:
         settings = load_country_settings()
         requested_code = (country_code or settings.default_country).strip().upper()
@@ -544,7 +545,7 @@ class PhotoCompliancePipeline:
                 )
             )
 
-        decoded: DecodedImage = decode_image_bytes(file_bytes, extension=extension)
+        decoded: DecodedImage = decode_image_bytes(file_bytes, extension=extension, mirror_mode=mirror_mode)
         image = decoded.bgr
         metadata = decoded.metadata
         orig_h, orig_w = image.shape[:2]
@@ -636,14 +637,48 @@ class PhotoCompliancePipeline:
 
         raw_orientation = metadata.get("raw_orientation")
         mirrored_orientation = bool(metadata.get("mirrored_orientation"))
-        if mirrored_orientation:
+        mirror_applied = bool(metadata.get("mirror_applied"))
+        mirror_reason = metadata.get("mirror_reason")
+        mirror_mode_used = str(metadata.get("mirror_mode") or "auto")
+        if mirrored_orientation and not mirror_applied:
             checks.append(
                 self._check(
                     code="POSSIBLE_MIRRORED_IMAGE",
                     status="fail",
                     message="EXIF indicates mirrored orientation.",
-                    action="Retake with standard camera mode (avoid mirrored selfie output).",
-                    details={"raw_orientation": raw_orientation},
+                    action="Retake with standard camera mode (avoid mirrored selfie output) or run with mirror mode set to unmirror.",
+                    details={
+                        "raw_orientation": raw_orientation,
+                        "mirror_mode": mirror_mode_used,
+                    },
+                )
+            )
+        elif mirrored_orientation and mirror_applied:
+            checks.append(
+                self._check(
+                    code="MIRROR_CORRECTION_APPLIED",
+                    status="pass",
+                    message="Mirrored orientation detected and corrected before analysis.",
+                    action="No action needed.",
+                    details={
+                        "raw_orientation": raw_orientation,
+                        "mirror_mode": mirror_mode_used,
+                        "mirror_reason": mirror_reason,
+                    },
+                )
+            )
+        elif mirror_applied:
+            checks.append(
+                self._check(
+                    code="MIRROR_ADJUSTMENT_APPLIED",
+                    status="pass",
+                    message="Horizontal mirror adjustment applied before analysis.",
+                    action="No action needed.",
+                    details={
+                        "raw_orientation": raw_orientation,
+                        "mirror_mode": mirror_mode_used,
+                        "mirror_reason": mirror_reason,
+                    },
                 )
             )
 
