@@ -38,6 +38,13 @@ class DecodedImage:
     metadata: dict[str, Any]
 
 
+def _normalize_mirror_mode(value: str | None) -> str:
+    mode = str(value or "auto").strip().lower()
+    if mode in {"auto", "unmirror", "keep"}:
+        return mode
+    return "auto"
+
+
 def _enforce_decode_pixel_limit(width: int, height: int) -> None:
     total_pixels = int(width) * int(height)
     if total_pixels > MAX_DECODE_PIXELS:
@@ -60,11 +67,19 @@ def _parse_exif_datetime(value: str | None) -> datetime | None:
 
 
 
-def decode_image_bytes(file_bytes: bytes, extension: str | None = None) -> DecodedImage:
+def decode_image_bytes(
+    file_bytes: bytes,
+    extension: str | None = None,
+    mirror_mode: str | None = "auto",
+) -> DecodedImage:
+    mirror_mode_norm = _normalize_mirror_mode(mirror_mode)
     metadata: dict[str, Any] = {
         "captured_at": None,
         "raw_orientation": None,
         "mirrored_orientation": False,
+        "mirror_mode": mirror_mode_norm,
+        "mirror_applied": False,
+        "mirror_reason": None,
     }
 
     try:
@@ -84,6 +99,14 @@ def decode_image_bytes(file_bytes: bytes, extension: str | None = None) -> Decod
 
         # Applies EXIF orientation, including mirrored modes.
         pil_img = ImageOps.exif_transpose(pil_img).convert("RGB")
+        if mirror_mode_norm == "unmirror":
+            pil_img = ImageOps.mirror(pil_img)
+            metadata["mirror_applied"] = True
+            metadata["mirror_reason"] = "forced_unmirror"
+        elif mirror_mode_norm == "auto" and bool(metadata["mirrored_orientation"]):
+            pil_img = ImageOps.mirror(pil_img)
+            metadata["mirror_applied"] = True
+            metadata["mirror_reason"] = "exif_mirrored_orientation"
         rgb = np.asarray(pil_img)
         bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
         return DecodedImage(bgr=bgr, metadata=metadata)
@@ -107,6 +130,10 @@ def decode_image_bytes(file_bytes: bytes, extension: str | None = None) -> Decod
             )
         raise ValueError("Unable to decode image. Please upload a valid JPG/PNG/HEIC image.")
     _enforce_decode_pixel_limit(bgr.shape[1], bgr.shape[0])
+    if mirror_mode_norm == "unmirror":
+        bgr = cv2.flip(bgr, 1)
+        metadata["mirror_applied"] = True
+        metadata["mirror_reason"] = "forced_unmirror"
     return DecodedImage(bgr=bgr, metadata=metadata)
 
 

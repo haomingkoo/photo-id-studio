@@ -1,6 +1,6 @@
 # Photo ID Compliance Studio
 
-Current version: `0.3.0`
+Current version: `0.3.1`
 
 Photo upload app with:
 
@@ -19,6 +19,18 @@ Photo upload app with:
 5. UI style is aligned to the `kooexperience.com` dark theme.
 6. Optional beautify mode supports color correction and soft-light cleanup (no geometry edits).
 7. Assist mode uses edge-guarded background whitening and never uses generative shoulder/hair repaint.
+8. Mirror handling modes for selfie uploads: `auto`, `unmirror`, `keep`.
+
+## iPhone Mirror Handling
+
+If your iPhone front-camera upload looks left-right reversed:
+
+1. Use `Selfie Mirror Handling = Auto` first (auto-corrects EXIF mirrored orientation).
+2. If it still looks mirrored, switch to `Selfie Mirror Handling = Force unmirror`.
+3. Check results include mirror-specific status codes:
+   - `MIRROR_CORRECTION_APPLIED`
+   - `MIRROR_ADJUSTMENT_APPLIED`
+   - `POSSIBLE_MIRRORED_IMAGE`
 
 ## Why MediaPipe Is Still In The Stack
 

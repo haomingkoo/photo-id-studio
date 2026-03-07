@@ -490,6 +490,14 @@
               </select>
             </div>
             <div class="field">
+              <label for="mirrorMode">Selfie Mirror Handling</label>
+              <select id="mirrorMode" name="mirror_mode">
+                <option value="auto">Auto (detect/correct EXIF mirrored uploads)</option>
+                <option value="unmirror">Force unmirror (flip left-right)</option>
+                <option value="keep">Keep as uploaded</option>
+              </select>
+            </div>
+            <div class="field">
               <label for="photo">Photo File</label>
               <input id="photo" name="photo" type="file" accept="image/*" required />
             </div>
@@ -843,6 +851,12 @@
       summaryChips.appendChild(createChip('Status', statusPill));
       summaryChips.appendChild(createChip('Resolution', `${report.width}x${report.height}`));
       summaryChips.appendChild(createChip('Segmentation', report.segmentation_backend || 'N/A'));
+      const mirrorCode = (report.checks || []).map(item => item.code);
+      let mirrorLabel = 'No mirror issue';
+      if (mirrorCode.includes('MIRROR_CORRECTION_APPLIED')) mirrorLabel = 'Detected + corrected';
+      else if (mirrorCode.includes('MIRROR_ADJUSTMENT_APPLIED')) mirrorLabel = 'Manual unmirror applied';
+      else if (mirrorCode.includes('POSSIBLE_MIRRORED_IMAGE')) mirrorLabel = 'Detected (not corrected)';
+      summaryChips.appendChild(createChip('Mirror', mirrorLabel));
       summaryChips.appendChild(
         createChip('Error Codes', report.error_codes.length ? report.error_codes.join(', ') : 'None')
       );
@@ -939,6 +953,7 @@
       fd.append('country_code', countrySelect.value);
       fd.append('mode', document.getElementById('mode').value);
       fd.append('beauty_mode', document.getElementById('beautyMode').value);
+      fd.append('mirror_mode', document.getElementById('mirrorMode').value);
 
       const localPreviewUrl = URL.createObjectURL(file);
       originalPreview.src = localPreviewUrl;
