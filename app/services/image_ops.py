@@ -28,6 +28,7 @@ MIRRORED_ORIENTATION_VALUES = {2, 4, 5, 7}
 HEIC_EXTENSIONS = {"heic", "heif"}
 MAX_DECODE_MEGAPIXELS = max(1.0, float(os.getenv("PHOTO_API_MAX_DECODE_MEGAPIXELS", "36")))
 MAX_DECODE_PIXELS = int(MAX_DECODE_MEGAPIXELS * 1_000_000)
+STRICT_WHITE_BG = os.getenv("PHOTO_API_BG_STRICT_WHITE", "1").strip().lower() in {"1", "true", "yes", "on"}
 Image.MAX_IMAGE_PIXELS = MAX_DECODE_PIXELS
 
 
@@ -671,7 +672,24 @@ def enhance_image(
         mask_keep = np.clip(np.maximum(mask_keep, subject_core * 0.995), 0.0, 1.0)
         edge_soft = cv2.GaussianBlur(mask_keep, (0, 0), 0.45 if is_rembg else 0.95)
         edge_soft_3 = np.repeat(edge_soft[:, :, None], 3, axis=2)
-        denoised = (fg * edge_soft_3 + bg_adjusted * (1.0 - edge_soft_3)).clip(0, 255).astype(np.uint8)
+        composited = (fg * edge_soft_3 + bg_adjusted * (1.0 - edge_soft_3)).clip(0, 255)
+        if STRICT_WHITE_BG:
+            # Showcase mode: collapse residual background texture/shadow toward solid white.
+            if is_rembg:
+                strict_alpha = np.clip((mask - 0.16) / 0.74, 0.0, 1.0)
+            else:
+                strict_alpha = np.clip((mask - 0.34) / 0.58, 0.0, 1.0)
+            strict_alpha = np.clip(np.maximum(strict_alpha, subject_core * 0.998), 0.0, 1.0)
+            strict_alpha = cv2.GaussianBlur(strict_alpha, (0, 0), 0.50 if is_rembg else 0.92)
+            strict_alpha_3 = np.repeat(strict_alpha[:, :, None], 3, axis=2)
+            white_canvas = np.full_like(composited, 255.0)
+            composited = composited * strict_alpha_3 + white_canvas * (1.0 - strict_alpha_3)
+
+            # Any confident background pixels are forced fully white to remove ghost shadows.
+            hard_white = np.repeat(np.clip((bg_alpha - 0.22) / 0.24, 0.0, 1.0)[:, :, None], 3, axis=2)
+            composited = composited * (1.0 - hard_white) + white_canvas * hard_white
+
+        denoised = composited.clip(0, 255).astype(np.uint8)
 
     mode = (beauty_mode or "").lower()
     if face_box is not None and mode in {"color", "tone", "color_correction"}:
