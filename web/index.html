@@ -182,6 +182,23 @@
       padding: 10px;
       background: #0b0b0b;
     }
+    .privacy-note {
+      margin-top: 10px;
+      border: 1px solid #1f2b41;
+      border-radius: 10px;
+      padding: 10px;
+      background: #0a101a;
+      font-size: 12px;
+      color: #c8d3e6;
+      display: grid;
+      gap: 6px;
+    }
+    .privacy-note strong { color: #dbe7ff; }
+    .privacy-note a {
+      color: #93c5fd;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
 
     .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
     .chip {
@@ -432,7 +449,7 @@
       <a class="nav-logo" href="https://kooexperience.com/">HK</a>
       <div class="nav-links">
         <a href="https://kooexperience.com" target="_blank" rel="noopener">Home</a>
-        <a href="https://github.com/haomingkoo" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/haomingkoo/photo-id-studio" target="_blank" rel="noopener">Repo</a>
       </div>
     </nav>
 
@@ -480,6 +497,12 @@
           </form>
           <p class="error" id="errorText"></p>
           <div class="hint" id="profileHint">Loading profile...</div>
+          <div class="privacy-note">
+            <div id="privacySummary"><strong>Privacy:</strong> Processing is request-scoped and in-memory.</div>
+            <div><strong>Source:</strong> <a id="privacyRepo" href="https://github.com/haomingkoo/photo-id-studio" target="_blank" rel="noopener">github.com/haomingkoo/photo-id-studio</a></div>
+            <div id="privacyDeployWrap" style="display:none;"><strong>Deployment:</strong> <a id="privacyDeploy" href="#" target="_blank" rel="noopener"></a></div>
+            <div><strong>Notice:</strong> This tool provides technical guidance and does not replace legal or immigration advice.</div>
+          </div>
         </div>
 
         <div>
@@ -580,7 +603,7 @@
 
               <rect x="670" y="38" width="190" height="84" class="node"></rect>
               <text x="688" y="66" class="node-title">4. Segmentation</text>
-              <text x="688" y="86" class="node-sub">MediaPipe + edge-safe refine</text>
+              <text x="688" y="86" class="node-sub">rembg primary + fallback</text>
 
               <rect x="880" y="38" width="190" height="84" class="node"></rect>
               <text x="898" y="66" class="node-title">5. Crop + Enhance</text>
@@ -600,7 +623,7 @@
           <div class="workflow-meta">
             <p>Hard fail checks run first. Example: mouth open means FAIL even if enhancement looks good.</p>
             <p>Edits are non-generative. The app only adjusts crop, exposure, mask compositing, and deterministic background whitening.</p>
-            <p>Segmentation backend is MediaPipe in this build.</p>
+            <p>Segmentation prefers rembg for difficult backgrounds, with MediaPipe fallback.</p>
           </div>
         </div>
 
@@ -618,8 +641,8 @@
             <h3>Model Choice</h3>
             <ul>
               <li>FaceMesh gives dense landmarks for pose, eye, mouth, and framing checks.</li>
-              <li>MediaPipe segmentation provides fast CPU-friendly person/background separation.</li>
-              <li>OpenCV compositing adds confidence gating and border guards on top of the MediaPipe mask.</li>
+              <li>rembg improves person/background separation on non-flat backgrounds.</li>
+              <li>OpenCV compositing adds confidence gating and border guards on top of the selected segmentation mask.</li>
               <li>OpenCV handles crop geometry, vertical rebalance, and assist background whitening.</li>
             </ul>
           </div>
@@ -628,7 +651,7 @@
             <ul>
               <li>FaceMesh runs once per image and returns landmark points in image coordinates.</li>
               <li>From landmarks, the app computes inter-eye distance, roll, yaw proxy, pitch proxy, and mouth gap ratio.</li>
-              <li>Segmentation path: run MediaPipe selfie segmentation and get foreground probability mask.</li>
+              <li>Segmentation path: run rembg first; use MediaPipe fallback if rembg is unavailable.</li>
               <li>Crop pass includes iterative eye-line recentering plus segmentation-aware vertical rebalance.</li>
               <li>Boundary guards protect shoulders/hair near frame edges during whitening.</li>
             </ul>
@@ -636,10 +659,10 @@
           <div class="panel guide-card">
             <h3>Backend Selection</h3>
             <ul>
-              <li>`MediaPipe`: CPU-friendly segmentation backend used for all requests.</li>
-              <li>Backend details are still logged in Result Overview and check rows.</li>
-              <li>If MediaPipe is unavailable, segmentation-dependent checks become manual.</li>
-              <li>No external model file path is required for segmentation.</li>
+              <li>`rembg`: best quality on complex backgrounds (higher memory footprint).</li>
+              <li>`MediaPipe`: lightweight fallback when rembg is disabled or unavailable.</li>
+              <li>Backend details are logged in Result Overview and check rows.</li>
+              <li>If both are unavailable, segmentation-dependent checks become manual.</li>
             </ul>
           </div>
           <div class="panel guide-card">
@@ -697,7 +720,7 @@
             <ul>
               <li>Frontend: single-page HTML/CSS/JS, no framework dependency.</li>
               <li>API: FastAPI `/api/analyze` and `/api/countries`.</li>
-              <li>CV: MediaPipe FaceMesh + MediaPipe segmentation + OpenCV post-process.</li>
+              <li>CV: MediaPipe FaceMesh + rembg/MediaPipe segmentation + OpenCV post-process.</li>
               <li>Post-process: OpenCV crop + assist whitening (when mask exists) + optional beautify (no subject-edge repaint).</li>
               <li>Deploy: one service container via Uvicorn behind HTTPS.</li>
             </ul>
@@ -715,7 +738,7 @@
           <div class="panel guide-card">
             <h3>Runbook</h3>
             <ul>
-              <li>Segmentation backend is fixed to MediaPipe.</li>
+              <li>rembg can be enabled for quality and configured to unload after idle timeout.</li>
               <li>If status is `FAIL`, fix fail codes first, then do visual tuning.</li>
               <li>If shoulders/hair edges look wrong, retake instead of forcing synthetic cleanup.</li>
               <li>Retake if hair/shoulders are clipped instead of forcing cleanup.</li>
@@ -748,6 +771,10 @@
     const compareLeftTitle = document.getElementById('compareLeftTitle');
     const compareRightTitle = document.getElementById('compareRightTitle');
     const downloadBtn = document.getElementById('downloadBtn');
+    const privacySummary = document.getElementById('privacySummary');
+    const privacyRepo = document.getElementById('privacyRepo');
+    const privacyDeploy = document.getElementById('privacyDeploy');
+    const privacyDeployWrap = document.getElementById('privacyDeployWrap');
     const tabStudioBtn = document.getElementById('tabStudioBtn');
     const tabGuideBtn = document.getElementById('tabGuideBtn');
     const studioPanel = document.getElementById('studioPanel');
@@ -869,6 +896,32 @@
       }
     }
 
+    async function loadPrivacyNotice() {
+      try {
+        const response = await fetch('/api/privacy');
+        if (!response.ok) {
+          return;
+        }
+        const payload = await response.json();
+        if (payload.retention_policy) {
+          privacySummary.textContent = `Privacy: ${payload.retention_policy}`;
+        }
+        if (payload.repo_url) {
+          privacyRepo.href = payload.repo_url;
+          privacyRepo.textContent = payload.repo_url.replace(/^https?:\/\//, '');
+        }
+        if (payload.app_url) {
+          privacyDeploy.href = payload.app_url;
+          privacyDeploy.textContent = payload.app_url;
+          privacyDeployWrap.style.display = 'block';
+        } else {
+          privacyDeployWrap.style.display = 'none';
+        }
+      } catch (_) {
+        // Keep default static notice if privacy metadata call fails.
+      }
+    }
+
     countrySelect.addEventListener('change', () => renderProfileHint(countrySelect.value));
 
     form.addEventListener('submit', async (event) => {
@@ -964,6 +1017,7 @@
       profileHint.textContent = 'Failed to load country profiles.';
       errorText.textContent = err.message;
     });
+    loadPrivacyNotice();
   </script>
 </body>
 </html>

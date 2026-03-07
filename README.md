@@ -1,11 +1,11 @@
 # Photo ID Compliance Studio
 
-Current version: `0.2.0`
+Current version: `0.3.0`
 
 Photo upload app with:
 
 1. Face/landmark detection (MediaPipe FaceMesh)
-2. Person segmentation for background checks (MediaPipe Selfie Segmentation)
+2. Person segmentation for background checks (`rembg` primary, `MediaPipe` fallback)
 3. Rule-based compliance engine with clear error codes and actions
 4. Auto-crop to country profile dimensions (default: Singapore)
 5. Processed output image (crop + straighten + assist background whitening + optional facial tonal cleanup)
@@ -20,9 +20,9 @@ Photo upload app with:
 6. Optional beautify mode supports color correction and soft-light cleanup (no geometry edits).
 7. Assist mode uses edge-guarded background whitening and never uses generative shoulder/hair repaint.
 
-## Why MediaPipe
+## Why MediaPipe Is Still In The Stack
 
-MediaPipe was selected as the default CV backend for this app because it gives the best implementation trade-off for a local-first product:
+MediaPipe remains important in this app as a reliable, CPU-friendly fallback and for dense facial landmarks:
 
 1. Fast landmark inference on CPU (important for laptop/server deployments without GPU).
 2. Stable, dense facial landmarks suitable for rule checks (eye visibility, roll, pitch/yaw heuristics, mouth-closed checks).
@@ -31,12 +31,14 @@ MediaPipe was selected as the default CV backend for this app because it gives t
 
 ## Segmentation Strategy
 
-The app uses a single segmentation backend:
+The app supports dual segmentation backends:
 
-1. `MediaPipe`:
-   - CPU-friendly and stable for server deployment.
-   - Works with OpenCV refinement, border guards, and confidence gating for cleaner shoulders/hair boundaries.
-   - No external ONNX model file path required.
+1. `rembg` (primary when enabled):
+   - Better separation on non-flat/complex backgrounds.
+   - Higher RAM usage, so session loading is configurable and can auto-unload after idle.
+2. `MediaPipe` (fallback):
+   - CPU-friendly fallback when rembg is disabled/unavailable.
+   - Works with OpenCV refinement, border guards, and confidence gating.
 
 ## Current Methods (Pipeline Summary)
 
@@ -45,7 +47,7 @@ The app uses a single segmentation backend:
 2. Face geometry extraction:
    - Uses FaceMesh landmarks for eye distance, eye line, roll/yaw/pitch proxies, and mouth checks.
 3. Segmentation and background checks:
-   - Uses MediaPipe person mask for background compliance checks and assist post-processing.
+   - Uses rembg as primary person mask (with MediaPipe fallback) for compliance checks and assist post-processing.
 4. Crop solver:
    - Computes profile-target crop from inter-eye distance plus side/top/bottom safety margins.
    - Runs iterative eye-line recentering.
@@ -146,10 +148,11 @@ For low-cost deployment, use these environment variables:
 10. `PHOTO_API_MAX_DECODE_MEGAPIXELS=36`
 11. `PHOTO_API_ALLOWED_ORIGINS=`
 12. `PHOTO_API_TRUSTED_PROXY_IPS=`
-13. `PHOTO_API_ENABLE_REMBG=0`
+13. `PHOTO_API_ENABLE_REMBG=1`
 14. `PHOTO_API_REMBG_LAZY_LOAD=1`
-15. `PHOTO_API_BG_STRICT_WHITE=1`
-16. `PHOTO_API_LOG_ANALYZE_METRICS=1`
+15. `PHOTO_API_REMBG_IDLE_UNLOAD_SEC=900`
+16. `PHOTO_API_BG_STRICT_WHITE=1`
+17. `PHOTO_API_LOG_ANALYZE_METRICS=1`
 
 What this does:
 
@@ -162,7 +165,7 @@ What this does:
 7. Allows typical high-resolution phone photos while rejecting oversized request bodies and extreme pixel-count images.
 8. Keeps browser CORS closed by default unless you explicitly allow cross-origin frontend hosts.
 9. Keeps `X-Forwarded-For` disabled by default unless you explicitly trust your proxy setup.
-10. Allows low-RAM deploys to disable `rembg` (the heaviest segmentation model).
+10. Keeps high-quality rembg segmentation while lazy-loading and auto-unloading after idle.
 11. Improves diagnostics with per-request memory telemetry logs.
 12. Forces stricter white compositing in assist mode to reduce shadow ghosting.
 
@@ -192,8 +195,9 @@ This repo is now deployment-ready with:
    - `PHOTO_API_MAX_DECODE_MEGAPIXELS=36`
    - `PHOTO_API_ALLOWED_ORIGINS=https://your-frontend.example.com`
    - `PHOTO_API_TRUSTED_PROXY_IPS=`
-   - `PHOTO_API_ENABLE_REMBG=0`
+   - `PHOTO_API_ENABLE_REMBG=1`
    - `PHOTO_API_REMBG_LAZY_LOAD=1`
+   - `PHOTO_API_REMBG_IDLE_UNLOAD_SEC=900`
    - `PHOTO_API_BG_STRICT_WHITE=1`
    - `PHOTO_API_LOG_ANALYZE_METRICS=1`
 5. Healthcheck path:
@@ -201,7 +205,8 @@ This repo is now deployment-ready with:
 
 ### Suggested instance size
 
-1. Recommended: `1 vCPU / 2 GB RAM` for MediaPipe-only deployment.
+1. Recommended: `1 vCPU / 2 GB RAM` minimum for fallback-only mode.
+2. Recommended: `1 vCPU / 3 GB RAM` for rembg-enabled deployments with bursty traffic.
 
 ## Versioning
 
@@ -216,6 +221,79 @@ This repository uses:
 2. If behavior/config changed, update `README.md`.
 3. For release commits, bump `VERSION`.
 4. Add release notes in `CHANGELOG.md`.
+
+## Privacy & Data Handling
+
+1. Uploaded photos are processed in-memory for the active request.
+2. This app does not persist uploaded photos to local disk or database.
+3. Responses include image previews in the API payload; clients should handle their own retention/caching policies.
+4. API responses set `Cache-Control: no-store` for `/api/*` routes.
+5. Public transparency endpoint: `GET /api/privacy`.
+
+Recommended env:
+
+1. `PHOTO_API_PUBLIC_REPO_URL=https://github.com/haomingkoo/photo-id-studio`
+2. `PHOTO_API_PUBLIC_APP_URL=https://studio.kooexperience.com`
+3. `PHOTO_API_STORAGE_POLICY=transient-in-memory`
+
+## Legal & Risk Controls
+
+1. Keep a clear user notice that this tool provides technical guidance and not legal/immigration advice.
+2. Require users to confirm they have consent/rights for any uploaded photo.
+3. Keep admin endpoints protected with `PHOTO_API_ADMIN_API_KEY`.
+4. Keep CORS allowlist strict via `PHOTO_API_ALLOWED_ORIGINS`.
+5. Review logs for abuse patterns and unauthorized admin requests.
+
+## KOO Control Center Integration
+
+This service exposes control-center contract endpoints:
+
+1. `GET /api/health`
+2. `GET /api/status`
+3. `GET /api/admin/status`
+4. `GET /api/admin/usage-summary`
+5. `GET /api/admin/pipeline-status`
+6. `GET /api/admin/daily-report`
+7. `GET /api/admin/logs`
+
+Recommended env for admin integration:
+
+1. `PHOTO_API_ADMIN_ENABLED=1`
+2. `PHOTO_API_ADMIN_API_KEY=<strong-random-key>`
+3. `PHOTO_API_ADMIN_AUTH_HEADER=X-API-Key`
+4. `PHOTO_API_ADMIN_AUTH_WINDOW_SEC=300`
+5. `PHOTO_API_ADMIN_AUTH_MAX_FAILS=10`
+6. `PHOTO_API_ADMIN_AUTH_BLOCK_SEC=900`
+7. `PHOTO_API_SERVICE_NAME=photo-id-studio-api`
+8. `PHOTO_API_SERVICE_ID=photo-id-studio`
+9. `PHOTO_API_CONTRACT=control-center-v1`
+10. `PHOTO_API_CONTRACT_VERSION=2026-03-07`
+11. `PHOTO_API_GIT_SHA=<commit-sha>`
+12. `PHOTO_API_DEPLOYMENT_ID=<platform-deploy-id>`
+
+Service registry example (control-center):
+
+```json
+{
+  "service_id": "photo-id-studio",
+  "name": "photo-id-studio",
+  "service_type": "photo_compliance",
+  "base_url": "https://photo-id-studio.your-domain.com",
+  "app_url": "https://photo-id-studio.your-domain.com",
+  "repo_url": "https://github.com/haomingkoo/photo-id-studio",
+  "health_path": "/api/health",
+  "status_path": "/api/status",
+  "usage_path": "/api/admin/usage-summary",
+  "pipeline_path": "/api/admin/pipeline-status",
+  "report_path": "/api/admin/daily-report",
+  "logs_path": "/api/admin/logs",
+  "auth_type": "x_api_key",
+  "auth_header": "X-API-Key",
+  "secret_env_var": "PHOTO_ID_STUDIO_API_KEY",
+  "timeout_sec": 12,
+  "enabled": true
+}
+```
 
 ## Run Locally
 
