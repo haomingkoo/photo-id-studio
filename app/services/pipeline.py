@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import gc
 import logging
 import os
 import threading
@@ -57,6 +58,21 @@ def _env_flag(name: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _trim_process_heap() -> bool:
+    if os.name != "posix":
+        return False
+    try:
+        import ctypes
+
+        libc = ctypes.CDLL("libc.so.6")
+        trim = getattr(libc, "malloc_trim", None)
+        if trim is None:
+            return False
+        return bool(trim(0))
+    except Exception:
+        return False
+
+
 @dataclass
 class FaceGeometry:
     landmarks_px: np.ndarray
@@ -76,6 +92,11 @@ class PhotoCompliancePipeline:
         self._enable_rembg = _env_flag("PHOTO_API_ENABLE_REMBG", True)
         self._rembg_lazy_load = _env_flag("PHOTO_API_REMBG_LAZY_LOAD", True)
         self._rembg_session_lock = threading.Lock()
+        self._rembg_idle_unload_sec = max(0, int(os.getenv("PHOTO_API_REMBG_IDLE_UNLOAD_SEC", "900")))
+        self._rembg_unload_timer: threading.Timer | None = None
+        self._rembg_unload_token = 0
+        self._rembg_unload_at_monotonic: float | None = None
+        self._rembg_last_used_ts: str | None = None
 
         if mp is not None:
             try:
@@ -101,11 +122,84 @@ class PhotoCompliancePipeline:
         else:
             LOG.info("rembg_lazy_load_enabled")
 
+    def _cancel_rembg_unload_timer_locked(self) -> None:
+        timer = self._rembg_unload_timer
+        if timer is not None:
+            timer.cancel()
+            self._rembg_unload_timer = None
+        self._rembg_unload_at_monotonic = None
+
+    def _schedule_rembg_unload(self) -> None:
+        if self._rembg_idle_unload_sec <= 0:
+            return
+        with self._rembg_session_lock:
+            if self.rembg_session is None:
+                return
+            self._cancel_rembg_unload_timer_locked()
+            self._rembg_unload_token += 1
+            token = self._rembg_unload_token
+            self._rembg_unload_at_monotonic = time.monotonic() + float(self._rembg_idle_unload_sec)
+            timer = threading.Timer(self._rembg_idle_unload_sec, self._unload_rembg_session_due_to_idle, args=(token,))
+            timer.daemon = True
+            self._rembg_unload_timer = timer
+            timer.start()
+
+    def _unload_rembg_session_due_to_idle(self, token: int) -> None:
+        did_unload = False
+        with self._rembg_session_lock:
+            if token != self._rembg_unload_token:
+                return
+            self._rembg_unload_timer = None
+            self._rembg_unload_at_monotonic = None
+            if self.rembg_session is None:
+                return
+            self.rembg_session = None
+            did_unload = True
+        if did_unload:
+            gc.collect()
+            trimmed = _trim_process_heap()
+            LOG.info(
+                "rembg_session_unloaded reason=idle timeout_sec=%s heap_trimmed=%s",
+                self._rembg_idle_unload_sec,
+                int(trimmed),
+            )
+
+    def _acquire_rembg_session(self):
+        if not self._enable_rembg or _rembg_remove is None or _PILImage is None:
+            return None
+        if self.rembg_session is None:
+            self._ensure_rembg_session()
+        with self._rembg_session_lock:
+            if self.rembg_session is None:
+                return None
+            self._cancel_rembg_unload_timer_locked()
+            self._rembg_last_used_ts = datetime.now(timezone.utc).isoformat()
+            return self.rembg_session
+
+    def runtime_diagnostics(self) -> dict[str, Any]:
+        unload_in_sec: int | None = None
+        with self._rembg_session_lock:
+            if self._rembg_unload_at_monotonic is not None:
+                unload_in_sec = max(0, int(round(self._rembg_unload_at_monotonic - time.monotonic())))
+            rembg_loaded = self.rembg_session is not None
+            last_used = self._rembg_last_used_ts
+        return {
+            "rembg": {
+                "enabled": self._enable_rembg,
+                "lazy_load": self._rembg_lazy_load,
+                "session_loaded": rembg_loaded,
+                "idle_unload_sec": self._rembg_idle_unload_sec,
+                "unload_in_sec": unload_in_sec,
+                "last_used_ts": last_used,
+            }
+        }
+
     def _ensure_rembg_session(self) -> None:
         if not self._enable_rembg or _rembg_new_session is None:
             return
         if self.rembg_session is not None:
             return
+        session_ready = False
         with self._rembg_session_lock:
             if self.rembg_session is not None:
                 return
@@ -118,9 +212,12 @@ class PhotoCompliancePipeline:
                     "rembg_session_ready model=u2net_human_seg init_ms=%s",
                     int((time.perf_counter() - t0) * 1000),
                 )
+                session_ready = True
             except Exception as exc:
                 self.rembg_session = None
                 LOG.warning("rembg_session_init_failed error=%s", exc.__class__.__name__)
+        if session_ready:
+            self._schedule_rembg_unload()
 
     def _resize_long_side(self, bgr_image: np.ndarray, max_long_side: int) -> tuple[np.ndarray, float]:
         h, w = bgr_image.shape[:2]
@@ -223,22 +320,21 @@ class PhotoCompliancePipeline:
         return result.segmentation_mask.astype(np.float32)
 
     def _segment_person_rembg(self, bgr_image: np.ndarray) -> np.ndarray | None:
-        if not self._enable_rembg or _rembg_remove is None or _PILImage is None:
-            return None
-        if self.rembg_session is None:
-            self._ensure_rembg_session()
-        if self.rembg_session is None:
+        session = self._acquire_rembg_session()
+        if session is None:
             return None
         try:
             rgb = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2RGB)
             pil_img = _PILImage.fromarray(rgb)
-            result = _rembg_remove(pil_img, session=self.rembg_session, only_mask=True)
+            result = _rembg_remove(pil_img, session=session, only_mask=True)
             mask = np.asarray(result).astype(np.float32) / 255.0
             if mask.ndim == 3:
                 mask = mask[:, :, 0]
             return mask
         except Exception:
             return None
+        finally:
+            self._schedule_rembg_unload()
 
     def _segment_person(
         self,

@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-03-07
+
+### Added
+1. Control-center contract/admin endpoints for status, usage, pipeline, report, and logs.
+2. Public transparency endpoint: `GET /api/privacy`.
+3. Frontend privacy/legal notice with live repo/deploy metadata.
+4. rembg runtime diagnostics surfaced in status/pipeline payloads.
+
+### Changed
+1. rembg memory lifecycle now supports idle auto-unload via `PHOTO_API_REMBG_IDLE_UNLOAD_SEC`.
+2. API responses under `/api/*` now include no-store and hardening headers.
+3. README updated with privacy policy, legal-risk controls, and control-center integration details.
+
+### Security
+1. Admin auth includes IP-based failure window/block controls.
+2. Deployment guidance emphasizes secret-only key handling (no commits/log leakage).
+
 ## [0.2.0] - 2026-03-07
 
 ### Added
