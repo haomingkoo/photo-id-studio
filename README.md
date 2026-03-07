@@ -1,5 +1,7 @@
 # Photo ID Compliance Studio
 
+Current version: `0.2.0`
+
 Photo upload app with:
 
 1. Face/landmark detection (MediaPipe FaceMesh)
@@ -144,6 +146,10 @@ For low-cost deployment, use these environment variables:
 10. `PHOTO_API_MAX_DECODE_MEGAPIXELS=36`
 11. `PHOTO_API_ALLOWED_ORIGINS=`
 12. `PHOTO_API_TRUSTED_PROXY_IPS=`
+13. `PHOTO_API_ENABLE_REMBG=0`
+14. `PHOTO_API_REMBG_LAZY_LOAD=1`
+15. `PHOTO_API_BG_STRICT_WHITE=1`
+16. `PHOTO_API_LOG_ANALYZE_METRICS=1`
 
 What this does:
 
@@ -156,6 +162,9 @@ What this does:
 7. Allows typical high-resolution phone photos while rejecting oversized request bodies and extreme pixel-count images.
 8. Keeps browser CORS closed by default unless you explicitly allow cross-origin frontend hosts.
 9. Keeps `X-Forwarded-For` disabled by default unless you explicitly trust your proxy setup.
+10. Allows low-RAM deploys to disable `rembg` (the heaviest segmentation model).
+11. Improves diagnostics with per-request memory telemetry logs.
+12. Forces stricter white compositing in assist mode to reduce shadow ghosting.
 
 ## Deploy Online (Railway)
 
@@ -183,12 +192,30 @@ This repo is now deployment-ready with:
    - `PHOTO_API_MAX_DECODE_MEGAPIXELS=36`
    - `PHOTO_API_ALLOWED_ORIGINS=https://your-frontend.example.com`
    - `PHOTO_API_TRUSTED_PROXY_IPS=`
+   - `PHOTO_API_ENABLE_REMBG=0`
+   - `PHOTO_API_REMBG_LAZY_LOAD=1`
+   - `PHOTO_API_BG_STRICT_WHITE=1`
+   - `PHOTO_API_LOG_ANALYZE_METRICS=1`
 5. Healthcheck path:
    - `/api/health`
 
 ### Suggested instance size
 
 1. Recommended: `1 vCPU / 2 GB RAM` for MediaPipe-only deployment.
+
+## Versioning
+
+This repository uses:
+
+1. `VERSION` as the canonical app version.
+2. `CHANGELOG.md` for release notes.
+
+### Commit Checklist (for feature/fix commits)
+
+1. Update code.
+2. If behavior/config changed, update `README.md`.
+3. For release commits, bump `VERSION`.
+4. Add release notes in `CHANGELOG.md`.
 
 ## Run Locally
 
@@ -229,3 +256,5 @@ Returns available country profiles from `app/config/countries.yaml`.
 1. Current country profile: Singapore (`SG`) with output `400x514`.
 2. Add more country specs by extending `app/config/countries.yaml`.
 3. Some checks (for example whether an image was edited externally) are heuristic and should be reviewed before final submission workflows.
+4. Upload images are processed in-memory and are not persisted to local disk by default.
+5. If memory plateaus high with low CPU, check whether `rembg` model load occurred and inspect `analyze_metrics` logs.

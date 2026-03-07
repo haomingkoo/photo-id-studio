@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+import logging
 import os
+import threading
+import time
+from typing import Any
 
 import cv2
 import numpy as np
@@ -35,6 +38,7 @@ except Exception:  # pragma: no cover
     _rembg_new_session = None
     _rembg_remove = None
 
+LOG = logging.getLogger("photo_id_studio.pipeline")
 
 
 EAR_LEFT_IDX = [33, 160, 158, 133, 153, 144]
@@ -44,6 +48,13 @@ RIGHT_EYE_CENTER_IDX = [362, 263, 386, 374]
 NOSE_TIP_IDX = 1
 MOUTH_TOP_IDX = 13
 MOUTH_BOTTOM_IDX = 14
+
+
+def _env_flag(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
 @dataclass
@@ -62,6 +73,9 @@ class PhotoCompliancePipeline:
         self.face_mesh = None
         self.segmentation_mediapipe = None
         self.rembg_session = None
+        self._enable_rembg = _env_flag("PHOTO_API_ENABLE_REMBG", True)
+        self._rembg_lazy_load = _env_flag("PHOTO_API_REMBG_LAZY_LOAD", True)
+        self._rembg_session_lock = threading.Lock()
 
         if mp is not None:
             try:
@@ -78,13 +92,35 @@ class PhotoCompliancePipeline:
             except Exception:
                 self.segmentation_mediapipe = None
 
-        if _rembg_new_session is not None:
+        if not self._enable_rembg:
+            LOG.info("rembg_disabled_via_env")
+        elif _rembg_new_session is None:
+            LOG.warning("rembg_unavailable_missing_dependency")
+        elif not self._rembg_lazy_load:
+            self._ensure_rembg_session()
+        else:
+            LOG.info("rembg_lazy_load_enabled")
+
+    def _ensure_rembg_session(self) -> None:
+        if not self._enable_rembg or _rembg_new_session is None:
+            return
+        if self.rembg_session is not None:
+            return
+        with self._rembg_session_lock:
+            if self.rembg_session is not None:
+                return
             try:
+                t0 = time.perf_counter()
                 # u2net_human_seg: purpose-trained for human segmentation (~170MB).
                 # Handles messy/complex backgrounds much better than MediaPipe.
                 self.rembg_session = _rembg_new_session("u2net_human_seg")
-            except Exception:
+                LOG.info(
+                    "rembg_session_ready model=u2net_human_seg init_ms=%s",
+                    int((time.perf_counter() - t0) * 1000),
+                )
+            except Exception as exc:
                 self.rembg_session = None
+                LOG.warning("rembg_session_init_failed error=%s", exc.__class__.__name__)
 
     def _resize_long_side(self, bgr_image: np.ndarray, max_long_side: int) -> tuple[np.ndarray, float]:
         h, w = bgr_image.shape[:2]
@@ -187,7 +223,11 @@ class PhotoCompliancePipeline:
         return result.segmentation_mask.astype(np.float32)
 
     def _segment_person_rembg(self, bgr_image: np.ndarray) -> np.ndarray | None:
-        if self.rembg_session is None or _rembg_remove is None or _PILImage is None:
+        if not self._enable_rembg or _rembg_remove is None or _PILImage is None:
+            return None
+        if self.rembg_session is None:
+            self._ensure_rembg_session()
+        if self.rembg_session is None:
             return None
         try:
             rgb = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2RGB)

@@ -5,6 +5,8 @@ import ipaddress
 import logging
 import math
 import os
+import resource
+import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -16,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from app import __version__
 from app.config import load_country_settings
 from app.schemas import AnalyzeResponse, CountryInfo
 from app.services.pipeline import PhotoCompliancePipeline
@@ -30,10 +33,88 @@ def _split_csv_env(name: str) -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
+def _flag_env(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _parse_proc_status_kb(key: str) -> int | None:
+    status_path = Path("/proc/self/status")
+    if not status_path.exists():
+        return None
+    try:
+        with status_path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                if line.startswith(f"{key}:"):
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        return int(parts[1])
+    except Exception:
+        return None
+    return None
+
+
+def _read_cgroup_bytes(paths: list[str]) -> int | None:
+    for candidate in paths:
+        p = Path(candidate)
+        if not p.exists():
+            continue
+        try:
+            raw = p.read_text(encoding="utf-8").strip()
+            if not raw or raw == "max":
+                return None
+            value = int(raw)
+            if value <= 0:
+                return None
+            return value
+        except Exception:
+            continue
+    return None
+
+
+def _maxrss_bytes() -> int | None:
+    try:
+        usage = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    except Exception:
+        return None
+    if usage <= 0:
+        return None
+    if sys.platform == "darwin":
+        return usage
+    return usage * 1024
+
+
+def _bytes_to_mb(value: int | None) -> float | None:
+    if value is None:
+        return None
+    return round(float(value) / (1024.0 * 1024.0), 2)
+
+
+def _memory_snapshot() -> dict[str, float | None]:
+    vmrss_kb = _parse_proc_status_kb("VmRSS")
+    vmhwm_kb = _parse_proc_status_kb("VmHWM")
+    cgroup_usage = _read_cgroup_bytes(
+        ["/sys/fs/cgroup/memory.current", "/sys/fs/cgroup/memory/memory.usage_in_bytes"]
+    )
+    cgroup_limit = _read_cgroup_bytes(
+        ["/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"]
+    )
+    return {
+        "rss_mb": _bytes_to_mb(vmrss_kb * 1024 if vmrss_kb is not None else None),
+        "hwm_mb": _bytes_to_mb(vmhwm_kb * 1024 if vmhwm_kb is not None else None),
+        "maxrss_mb": _bytes_to_mb(_maxrss_bytes()),
+        "cgroup_usage_mb": _bytes_to_mb(cgroup_usage),
+        "cgroup_limit_mb": _bytes_to_mb(cgroup_limit),
+    }
+
+
 ALLOWED_ORIGINS = _split_csv_env("PHOTO_API_ALLOWED_ORIGINS")
 TRUSTED_PROXY_IPS = set(_split_csv_env("PHOTO_API_TRUSTED_PROXY_IPS"))
+LOG_ANALYZE_METRICS = _flag_env("PHOTO_API_LOG_ANALYZE_METRICS", False)
 
-app = FastAPI(title="Photo ID Compliance Studio", version="0.1.0")
+app = FastAPI(title="Photo ID Compliance Studio", version=__version__)
 
 if ALLOWED_ORIGINS:
     app.add_middleware(
@@ -235,6 +316,7 @@ def health() -> dict[str, Any]:
             "daily_limit": DAILY_LIMIT,
             "max_inflight": MAX_INFLIGHT_ANALYZE,
             "trust_x_forwarded_for": TRUST_X_FORWARDED_FOR,
+            "log_analyze_metrics": LOG_ANALYZE_METRICS,
         },
     }
 
@@ -298,6 +380,17 @@ async def analyze(
         return payload
 
     _set_limit_headers(response, decision)
+    started_mono = time.perf_counter()
+    mem_before = _memory_snapshot() if LOG_ANALYZE_METRICS else {}
+    upload_bytes = 0
+    report = None
+    processed_b64 = None
+    original_b64 = None
+    comparison_no_corr_b64 = None
+    comparison_color_corr_b64 = None
+    outcome = "ok"
+    status_code = 200
+    error_kind = None
 
     try:
         if _content_length_exceeds_limit(request, MAX_UPLOAD_BYTES):
@@ -316,6 +409,7 @@ async def analyze(
         )
         if not file_bytes:
             raise HTTPException(status_code=400, detail="Uploaded image is empty.")
+        upload_bytes = len(file_bytes)
 
         report, processed_b64, original_b64, comparison_no_corr_b64, comparison_color_corr_b64 = pipeline.analyze(
             file_bytes=file_bytes,
@@ -324,14 +418,60 @@ async def analyze(
             mode=mode,
             beauty_mode=beauty_mode,
         )
-    except HTTPException:
+    except HTTPException as exc:
+        outcome = "http_error"
+        status_code = exc.status_code
+        error_kind = "HTTPException"
         raise
     except ValueError as exc:
+        outcome = "value_error"
+        status_code = 400
+        error_kind = exc.__class__.__name__
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # pragma: no cover
+        outcome = "internal_error"
+        status_code = 500
+        error_kind = exc.__class__.__name__
         LOG.exception("analyze_failed ip=%s filename=%s", client_ip, photo.filename or "upload.jpg")
         return JSONResponse(status_code=500, content={"error": "analysis_failed", "detail": "Internal error"})
     finally:
+        if LOG_ANALYZE_METRICS:
+            mem_after = _memory_snapshot()
+            elapsed_ms = int((time.perf_counter() - started_mono) * 1000)
+            rss_before = mem_before.get("rss_mb")
+            rss_after = mem_after.get("rss_mb")
+            rss_delta = None
+            if isinstance(rss_before, float) and isinstance(rss_after, float):
+                rss_delta = round(rss_after - rss_before, 2)
+            LOG.info(
+                "analyze_metrics ip=%s status=%s outcome=%s error_kind=%s country=%s mode=%s beauty_mode=%s "
+                "upload_bytes=%s original_b64_bytes=%s processed_b64_bytes=%s cmp_no_corr_b64_bytes=%s "
+                "cmp_color_corr_b64_bytes=%s overall_status=%s segmentation_backend=%s elapsed_ms=%s "
+                "rss_before_mb=%s rss_after_mb=%s rss_delta_mb=%s hwm_after_mb=%s maxrss_after_mb=%s "
+                "cgroup_usage_mb=%s cgroup_limit_mb=%s",
+                client_ip,
+                status_code,
+                outcome,
+                error_kind,
+                country_code,
+                mode,
+                beauty_mode,
+                upload_bytes,
+                len(original_b64 or ""),
+                len(processed_b64 or ""),
+                len(comparison_no_corr_b64 or ""),
+                len(comparison_color_corr_b64 or ""),
+                getattr(report, "overall_status", None),
+                getattr(report, "segmentation_backend", None),
+                elapsed_ms,
+                rss_before,
+                rss_after,
+                rss_delta,
+                mem_after.get("hwm_mb"),
+                mem_after.get("maxrss_mb"),
+                mem_after.get("cgroup_usage_mb"),
+                mem_after.get("cgroup_limit_mb"),
+            )
         await photo.close()
         INFLIGHT_ANALYZE_GUARD.release()
 
