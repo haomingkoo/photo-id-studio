@@ -2,6 +2,8 @@
 
 Current version: `0.3.1`
 
+[**Try Photo ID Compliance Studio**](https://studio.kooexperience.com/)
+
 Photo upload app with:
 
 1. Face/landmark detection (MediaPipe FaceMesh)
