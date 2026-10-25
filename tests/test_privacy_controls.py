@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+import base64
 import datetime as dt
+import hashlib
 import io
 import logging
+import os
+import re
+import subprocess
+import sys
 import tempfile
 
 import numpy as np
@@ -299,3 +305,29 @@ def test_privacy_endpoint_copy_matches_behaviour(client):
 
     assert "never written to disk" in body["retention_policy"]
     assert body["privacy_url"] == "/privacy"
+
+
+@pytest.mark.parametrize("path", ["/docs", "/redoc", "/openapi.json"])
+def test_api_docs_hidden_by_default(client, path):
+    assert client.get(path).status_code == 404
+
+
+def test_api_docs_served_when_enabled():
+    code = "from app import main; assert main.app.openapi_url == '/openapi.json' and main.app.docs_url == '/docs'"
+    env = {**os.environ, "PHOTO_API_ENABLE_DOCS": "1"}
+    subprocess.run([sys.executable, "-c", code], check=True, env=env)
+
+
+def test_csp_allows_index_inline_script(client):
+    response = client.get("/")
+    csp = response.headers["content-security-policy"]
+    scripts = re.findall(r"<script>(.*?)</script>", response.text, flags=re.S)
+
+    assert scripts
+    for body in scripts:
+        digest = base64.b64encode(hashlib.sha256(body.encode()).digest()).decode()
+        assert f"'sha256-{digest}'" in csp
+    for directive in ("frame-ancestors 'none'", "object-src 'none'", "base-uri 'self'", "form-action 'self'"):
+        assert directive in csp
+    assert "https://static.cloudflareinsights.com" in csp
+    assert "'unsafe-inline'" not in csp.split("script-src")[1].split(";")[0]
