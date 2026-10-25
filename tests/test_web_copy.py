@@ -1,0 +1,51 @@
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app import main
+
+ROOT = Path(__file__).resolve().parents[1]
+FOOTER = "&copy; 2026 Haoming Koo"
+
+
+@pytest.fixture
+def client() -> TestClient:
+    return TestClient(main.app)
+
+
+def test_every_pipeline_check_has_plain_language_copy():
+    """Users never see raw codes: each code the pipeline can emit needs an entry in the page's CHECKS map."""
+    codes = set(re.findall(r'code="([A-Z_]+)"', (ROOT / "app/services/pipeline.py").read_text()))
+    html = (ROOT / "web/index.html").read_text()
+    checks_block = html.split("const CHECKS = {", 1)[1].split("};", 1)[0]
+    mapped = set(re.findall(r"^\s*([A-Z_]+):", checks_block, flags=re.M))
+
+    assert codes, "pipeline codes not found"
+    assert codes - mapped == set()
+
+
+def test_check_codes_are_not_rendered_as_text():
+    html = (ROOT / "web/index.html").read_text()
+    script = html.split("<script>", 1)[1]
+    # Codes may only be attached as a data attribute, never as visible text.
+    assert "textContent = check.code" not in script and "textContent = it.code" not in script
+    assert "Error Code" not in html
+
+
+@pytest.mark.parametrize("path", ["/", "/privacy", "/terms"])
+def test_pages_share_chrome(client, path):
+    html = client.get(path).text
+
+    assert '/static/site.css' in html
+    assert '/static/favicon.svg' in html
+    assert FOOTER in html and "privacy@kooexperience.com" in html and "kooexperience.com/" in html
+    assert "—" not in html  # no em dashes in copy
+
+
+@pytest.mark.parametrize("path", ["/static/site.css", "/static/favicon.svg", "/static/fonts/fonts.css", "/static/fonts/plex-sans-latin-400.woff2"])
+def test_static_assets_served(client, path):
+    assert client.get(path).status_code == 200

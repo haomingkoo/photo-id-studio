@@ -3,1155 +3,700 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Photo Compliance Studio</title>
+  <title>Photo ID Studio: check a passport photo</title>
+  <meta name="description" content="Check a passport or IC photo against official size, framing and background rules, and download a correctly cropped copy. Photos are never stored." />
+  <meta property="og:title" content="Photo ID Studio: check a passport photo" />
+  <meta property="og:description" content="Check a passport or IC photo against official rules and download a correctly cropped copy." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://studio.kooexperience.com/" />
+  <meta name="theme-color" content="#ffffff" />
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
   <link href="/static/fonts/fonts.css" rel="stylesheet" />
+  <link href="/static/site.css" rel="stylesheet" />
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --bg: #080808;
-      --surface: #111111;
-      --surface-2: #0d0d0d;
-      --border: #1e1e1e;
-      --accent: #3b82f6;
-      --text: #f0f0f0;
-      --muted: #6b7280;
-      --good: #22c55e;
-      --warn: #f59e0b;
-      --bad: #ef4444;
-    }
-    html, body {
-      width: 100%;
-      max-width: 100%;
-    }
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'Inter', system-ui, sans-serif;
-      font-size: 15px;
-      line-height: 1.6;
-      min-height: 100vh;
-      overflow-x: hidden;
-      background-image:
-        radial-gradient(circle at 60% 10%, rgba(59,130,246,.08) 0%, transparent 55%),
-        radial-gradient(rgba(255,255,255,.045) 1px, transparent 1px);
-      background-size: 100% 100%, 28px 28px;
-    }
-    .container {
-      width: min(1200px, 100%);
-      margin: 0 auto;
-      padding: 0 clamp(14px, 2.8vw, 28px) 52px;
-    }
-    .accent-bar { height: 3px; background: linear-gradient(90deg, #3b82f6, #6366f1, #8b5cf6); }
-    .nav-header { border-bottom: 1px solid var(--border); }
-    nav {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 14px 0;
-    }
-    .nav-logo {
-      font-size: 18px;
-      font-weight: 700;
-      letter-spacing: .05em;
-      color: var(--text);
-      text-decoration: none;
-      transition: color .2s;
-    }
-    .nav-logo:hover { color: #3b82f6; }
-    .nav-links { display: flex; align-items: center; gap: 24px; }
-    .nav-links a {
-      color: var(--muted);
-      text-decoration: none;
-      font-size: 13px;
-      transition: color .2s;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .nav-links a:hover { color: var(--text); }
-    .nav-links svg { width: 16px; height: 16px; }
+    .page-head { padding-block: 40px 24px; max-width: 68ch; }
+    .page-head h1 { font-size: 32px; }
+    .page-head p { margin-top: 8px; color: var(--muted); font-size: 18px; line-height: 1.45; }
 
-    .hero {
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
-      gap: 18px;
-      padding: 18px 0 26px;
-      flex-wrap: wrap;
-    }
-    .hero-title {
-      font-size: clamp(30px, 6vw, 46px);
-      font-weight: 700;
-      line-height: 1.05;
-      letter-spacing: -.03em;
-      background: linear-gradient(135deg, #f0f0f0 28%, #3b82f6 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-    .hero-sub { color: var(--muted); font-size: 14px; margin-top: 8px; }
-    .tabs {
-      display: flex;
-      gap: 10px;
-      margin: 6px 0 16px;
-      flex-wrap: wrap;
-    }
-    .tab-btn {
-      height: 36px;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      background: #0b0b0b;
-      color: var(--muted);
-      padding: 0 14px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: border-color .2s, color .2s, background .2s;
-    }
-    .tab-btn.active {
-      color: var(--text);
-      border-color: rgba(59,130,246,.45);
-      background: linear-gradient(135deg, rgba(59,130,246,.2), rgba(59,130,246,.08));
-    }
-    .tab-panel { display: block; }
-    .tab-panel.hidden { display: none; }
+    .studio { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 24px; align-items: start; }
+    @media (max-width: 1023px) { .studio { grid-template-columns: minmax(0, 1fr); } }
+    .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); padding: 24px; }
+    @media (max-width: 600px) { .panel { padding: 16px; border-radius: var(--r-card); } }
+    .panel h2 { font-size: 18px; }
 
-    .panel {
-      border: 1px solid var(--border);
-      background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
-      border-radius: 14px;
-      padding: 18px;
-    }
-    .panel-title {
-      font-size: 11px;
-      letter-spacing: .14em;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin-bottom: 12px;
-      font-weight: 600;
-    }
+    /* Upload form */
+    .form { display: grid; gap: 16px; }
+    .drop { display: grid; gap: 12px; justify-items: start; padding: 16px; border: 1px dashed var(--line-strong); border-radius: var(--r-card); background: var(--sunken); }
+    .drop.is-over { border-style: solid; border-color: var(--accent); background: var(--accent-wash); }
+    .drop .file-name { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+    .drop .file-name strong { color: var(--ink); font-weight: 500; }
+    #photo:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .consent { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 12px; align-items: start; font-size: 15px; cursor: pointer; }
+    .consent input { width: 20px; height: 20px; margin: 2px 0 0; accent-color: var(--accent); cursor: pointer; }
+    .form-note { font-size: 13px; color: var(--muted); }
+    .form-error { font-size: 13px; color: var(--fail); font-weight: 500; }
+    .form-error:empty { display: none; }
+    details.more { border-top: 1px solid var(--line); padding-top: 12px; }
+    details.more summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 500; color: var(--ink); list-style: none; }
+    details.more summary::-webkit-details-marker { display: none; }
+    details.more summary::before { content: ""; width: 8px; height: 8px; margin-right: 12px; border-right: 1.6px solid var(--muted); border-bottom: 1.6px solid var(--muted); transform: rotate(-45deg); transition: transform .15s ease-out; }
+    details.more[open] summary::before { transform: rotate(45deg); }
+    details.more .more-body { display: grid; gap: 16px; padding-top: 8px; }
 
-    .layout {
-      display: grid;
-      grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
-      gap: 14px;
-      align-items: start;
-    }
-    .layout > * { min-width: 0; }
+    /* Result column */
+    .result { display: grid; gap: 24px; }
+    .result-status { display: grid; gap: 8px; }
+    .result-status h2 { font-size: 24px; }
+    .result-status p { color: var(--muted); }
+    .verdict { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 16px; align-items: start; padding: 16px; border-radius: var(--r-card); }
+    .verdict svg { width: 32px; height: 32px; }
+    .verdict h2 { font-size: 24px; }
+    .verdict p { margin-top: 4px; color: var(--ink); }
+    .verdict.pass { background: var(--pass-wash); } .verdict.pass svg { color: var(--pass); }
+    .verdict.review { background: var(--warn-wash); } .verdict.review svg { color: var(--warn); }
+    .verdict.fail { background: var(--fail-wash); } .verdict.fail svg { color: var(--fail); }
+    .verdict .meta { margin-top: 8px; font-size: 13px; color: var(--muted); }
 
-    .form-grid {
-      display: grid;
-      gap: 10px;
-    }
-    .field {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    .field label {
-      font-size: 11px;
-      color: var(--muted);
-      letter-spacing: .08em;
-      text-transform: uppercase;
-      font-weight: 600;
-    }
-    .field select,
-    .field input,
-    .btn {
-      height: 40px;
-      border-radius: 9px;
-      border: 1px solid var(--border);
-      background: #0b0b0b;
-      color: var(--text);
-      padding: 0 12px;
-      font-size: 14px;
-      outline: none;
-    }
-    .field input[type="file"] { padding: 8px 10px; height: auto; }
-    .field select:focus,
-    .field input:focus { border-color: rgba(59,130,246,.45); box-shadow: 0 0 0 2px rgba(59,130,246,.14); }
+    .photos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .photo { display: grid; gap: 8px; align-content: start; margin: 0; }
+    .photo figcaption { font-size: 13px; color: var(--muted); }
+    .photo figcaption strong { color: var(--ink); font-weight: 500; }
+    .photo-frame { background: var(--sunken); border: 1px solid var(--line); border-radius: var(--r-control); display: grid; place-items: center; overflow: hidden; aspect-ratio: 3 / 4; }
+    .photo-frame img { width: 100%; height: 100%; object-fit: contain; }
+    .photo-empty { padding: 16px; text-align: center; font-size: 13px; color: var(--muted); }
 
-    .btn {
-      cursor: pointer;
-      font-weight: 600;
-      transition: border-color .2s, background .2s;
-      background: linear-gradient(135deg, rgba(59,130,246,.2), rgba(59,130,246,.08));
-      border-color: rgba(59,130,246,.32);
-    }
-    .btn:hover { border-color: rgba(59,130,246,.52); }
+    /* The spec card: cropped photo with its pixel dimensions drawn as rulers. */
+    .spec { display: grid; grid-template-columns: minmax(0, 1fr) 28px; grid-template-rows: 24px auto; gap: 6px 8px; }
+    .spec .ruler-x, .spec .ruler-y { position: relative; color: var(--muted); font-size: 13px; display: grid; place-items: center; }
+    .spec .ruler-x { grid-column: 1; grid-row: 1; }
+    .spec .ruler-y { grid-column: 2; grid-row: 2; }
+    .spec .ruler-x::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid var(--line-strong); }
+    .spec .ruler-x::after { content: ""; position: absolute; inset: 6px 0; border-inline: 1px solid var(--line-strong); }
+    .spec .ruler-y::before { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; border-left: 1px solid var(--line-strong); }
+    .spec .ruler-y::after { content: ""; position: absolute; inset: 0 6px; border-block: 1px solid var(--line-strong); }
+    .spec .ruler-x span, .spec .ruler-y span { position: relative; z-index: 1; background: var(--surface); padding: 0 6px; white-space: nowrap; }
+    .spec .ruler-y span { writing-mode: vertical-rl; transform: rotate(180deg); padding: 6px 0; }
+    .spec .photo-frame { grid-column: 1; grid-row: 2; background: #fff; }
+    .empty-photos { grid-template-columns: minmax(0, 260px) minmax(0, 1fr); gap: 32px; }
+    @media (max-width: 480px) { .empty-photos { grid-template-columns: minmax(0, 1fr); } .empty-photos .photo { max-width: 260px; } }
+    .spec .outline { width: 62%; height: auto; color: var(--line-strong); }
 
-    .hint {
-      font-size: 12px;
-      color: var(--muted);
-      border: 1px dashed var(--border);
-      border-radius: 10px;
-      padding: 10px;
-      background: #0b0b0b;
-    }
-    .privacy-note {
-      margin-top: 10px;
-      border: 1px solid #1f2b41;
-      border-radius: 10px;
-      padding: 10px;
-      background: #0a101a;
-      font-size: 12px;
-      color: #c8d3e6;
-      display: grid;
-      gap: 6px;
-    }
-    .privacy-note strong { color: #dbe7ff; }
-    .privacy-note a {
-      color: #93c5fd;
-      text-decoration: underline;
-      text-underline-offset: 2px;
-    }
+    .result-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+    .result-actions .hint { flex: 1 1 220px; }
 
-    .consent {
-      display: flex;
-      gap: 10px;
-      align-items: flex-start;
-      font-size: 13px;
-      color: #c8d3e6;
-      line-height: 1.45;
-      cursor: pointer;
-    }
-    .consent input { width: 18px; height: 18px; margin-top: 1px; flex: none; accent-color: var(--accent); }
-    .consent input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-    .upload-notice { font-size: 12px; color: var(--muted); }
-    .upload-notice a, .site-footer a { color: #93c5fd; text-decoration: underline; text-underline-offset: 2px; }
-    .site-footer {
-      margin-top: 24px;
-      padding: 16px 0 8px;
-      border-top: 1px solid var(--border);
-      font-size: 12px;
-      color: var(--muted);
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px 18px;
-    }
+    /* Checklist */
+    .checks { display: grid; gap: 24px; }
+    .check-group h3 { font-size: 15px; display: flex; gap: 8px; align-items: baseline; }
+    .check-group h3 .count { color: var(--muted); font-weight: 400; }
+    .check-list { list-style: none; margin: 8px 0 0; padding: 0; border: 1px solid var(--line); border-radius: var(--r-card); background: var(--surface); }
+    .check-list li { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 12px; padding: 12px 16px; border-top: 1px solid var(--line); }
+    .check-list li:first-child { border-top: 0; }
+    .check-list svg { width: 20px; height: 20px; margin-top: 1px; }
+    .check-list .t { font-weight: 500; }
+    .check-list .g { color: var(--muted); margin-top: 2px; }
+    .s-fail svg { color: var(--fail); } .s-warn svg { color: var(--warn); } .s-manual svg { color: var(--accent); } .s-pass svg { color: var(--pass); }
+    details.passed > summary { cursor: pointer; list-style: none; min-height: 44px; display: flex; align-items: center; gap: 8px; font-weight: 600; }
+    details.passed > summary::-webkit-details-marker { display: none; }
+    details.passed > summary::after { content: "Show"; margin-left: auto; color: var(--accent); font-weight: 500; font-size: 13px; }
+    details.passed[open] > summary::after { content: "Hide"; }
+    details.passed > summary .count { color: var(--muted); font-weight: 400; }
 
-    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
-    .chip {
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      padding: 6px 12px;
-      font-size: 12px;
-      color: var(--muted);
-      background: #0c0c0c;
-    }
-    .chip strong { color: var(--text); }
+    .compare { display: grid; gap: 8px; }
+    .compare h3 { font-size: 15px; }
 
-    .images {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-bottom: 12px;
-    }
-    .img-box {
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      background: #090909;
-      min-height: 260px;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-    .img-title {
-      font-size: 11px;
-      letter-spacing: .12em;
-      text-transform: uppercase;
-      color: var(--muted);
-      padding: 8px 10px;
-      border-bottom: 1px solid var(--border);
-      background: #0d0d0d;
-    }
-    .img-box img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      background: repeating-conic-gradient(#101010 0% 25%, #0d0d0d 0% 50%) 50% / 14px 14px;
-      min-height: 220px;
-    }
-    .img-box img[hidden] { display: none; }
-    .img-empty {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px 16px;
-      text-align: center;
-      font-size: 13px;
-      color: var(--muted);
-      min-height: 220px;
-    }
-    .img-empty[hidden] { display: none; }
+    /* Loading and error */
+    .busy { display: grid; gap: 12px; }
+    .busy .bar { height: 4px; border-radius: 2px; background: var(--sunken); overflow: hidden; }
+    .busy .bar::before { content: ""; display: block; width: 40%; height: 100%; background: var(--accent); border-radius: 2px; animation: slide 1.4s cubic-bezier(.4, 0, .2, 1) infinite; }
+    @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+    @media (prefers-reduced-motion: reduce) { .busy .bar::before { animation: none; width: 100%; opacity: .5; } }
+    .alert { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 12px; padding: 16px; border-radius: var(--r-card); background: var(--fail-wash); }
+    .alert svg { width: 24px; height: 24px; color: var(--fail); }
+    .alert h2 { font-size: 18px; }
+    .alert p { margin-top: 4px; }
+    .alert .btn { margin-top: 12px; }
 
-    .status-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      border-radius: 999px;
-      padding: 6px 10px;
-      font-size: 11px;
-      letter-spacing: .06em;
-      text-transform: uppercase;
-      font-weight: 700;
-    }
-    .status-pass { background: rgba(34,197,94,.14); color: var(--good); }
-    .status-review { background: rgba(245,158,11,.14); color: var(--warn); }
-    .status-fail { background: rgba(239,68,68,.14); color: var(--bad); }
-
-    .table-wrap {
-      overflow-x: auto;
-      border-radius: 12px;
-      border: 1px solid var(--border);
-      max-width: 100%;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      background: var(--surface);
-    }
-    td { overflow-wrap: break-word; }
-    td.check-code { overflow-wrap: anywhere; }
-    th:nth-child(1) { width: 24%; }
-    th:nth-child(2) { width: 10%; }
-    th, td {
-      padding: 11px 11px;
-      border-bottom: 1px solid var(--border);
-      text-align: left;
-      vertical-align: top;
-      font-size: 13px;
-    }
-    th {
-      color: var(--muted);
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: .1em;
-      background: #0d0d0d;
-    }
-
-    .check-pass { color: var(--good); font-weight: 600; }
-    .check-fail { color: var(--bad); font-weight: 600; }
-    .check-warn { color: var(--warn); font-weight: 600; }
-    .check-manual { color: #38bdf8; font-weight: 600; }
-
-    .actions {
-      margin-top: 10px;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: #0b0b0b;
-      padding: 10px 12px;
-    }
-    .actions h4 {
-      font-size: 11px;
-      letter-spacing: .12em;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin-bottom: 8px;
-    }
-    .actions ul { margin-left: 18px; }
-    .actions li { font-size: 13px; color: var(--text); margin-bottom: 4px; }
-
-    .error { color: var(--bad); font-size: 13px; min-height: 18px; margin-top: 8px; }
-    .guide-intro {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      margin-bottom: 14px;
-      flex-wrap: wrap;
-    }
-    .guide-intro p {
-      color: var(--muted);
-      font-size: 13px;
-      max-width: 760px;
-    }
-    .guide-badges {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-    .guide-badge {
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      padding: 5px 10px;
-      background: #0b0b0b;
-      font-size: 11px;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: .08em;
-      font-weight: 600;
-    }
-
-    .flowchart {
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      background: #0b0b0b;
-      padding: 12px;
-      margin-bottom: 12px;
-    }
-    .flow-title {
-      font-size: 11px;
-      letter-spacing: .12em;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin-bottom: 10px;
-      font-weight: 600;
-    }
-    .flowchart-scroll {
-      border: 1px solid #1a1f2c;
-      border-radius: 10px;
-      background:
-        radial-gradient(circle at 20% -20%, rgba(59,130,246,.16), transparent 45%),
-        linear-gradient(180deg, #0d1118, #0b0f15);
-      overflow-x: auto;
-    }
-    .workflow-svg {
-      display: block;
-      width: 100%;
-      min-width: 980px;
-      height: auto;
-    }
-    .workflow-svg .lane-title {
-      fill: #8fa0ba;
-      font-size: 11px;
-      letter-spacing: .12em;
-      text-transform: uppercase;
-      font-weight: 700;
-    }
-    .workflow-svg .node {
-      fill: #0f1622;
-      stroke: #2a3952;
-      stroke-width: 1.4;
-      rx: 11;
-    }
-    .workflow-svg .node strong,
-    .workflow-svg .node-title {
-      fill: #f0f0f0;
-      font-size: 13px;
-      font-weight: 600;
-    }
-    .workflow-svg .node-sub {
-      fill: #9aa5b7;
-      font-size: 11px;
-    }
-    .workflow-svg .connector {
-      stroke: #4e6a94;
-      stroke-width: 1.6;
-      fill: none;
-      marker-end: url(#arrowHead);
-    }
-    .workflow-meta {
-      margin-top: 10px;
-      display: grid;
-      gap: 6px;
-      color: var(--muted);
-      font-size: 12.5px;
-    }
-
-    .guide-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-    }
-    .guide-card h3 {
-      font-size: 12px;
-      letter-spacing: .11em;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin-bottom: 10px;
-    }
-    .guide-card p, .guide-card li {
-      font-size: 13px;
-      color: var(--text);
-    }
-    .guide-card ul {
-      margin-left: 18px;
-      display: grid;
-      gap: 6px;
-    }
-    .guide-note {
-      margin-top: 12px;
-      font-size: 12px;
-      color: var(--muted);
-      border: 1px dashed var(--border);
-      border-radius: 10px;
-      padding: 10px;
-      background: #0b0b0b;
-    }
-
-    @media (max-width: 1020px) {
-      .layout { grid-template-columns: 1fr; }
-      .images { grid-template-columns: 1fr; }
-      .guide-grid { grid-template-columns: 1fr; }
-      .flowchart-scroll { margin: 0 -4px; }
-    }
-
-    @media (max-width: 767px) {
-      thead { display: none; }
-      table, tbody, tr, td { display: block; width: 100%; }
-      #checksBody tr { padding: 12px; border-bottom: 1px solid var(--border); }
-      #checksBody tr:last-child { border-bottom: 0; }
-      #checksBody td { border: 0; padding: 2px 0; }
-      #checksBody td[data-label] { display: grid; grid-template-columns: 7.5em minmax(0, 1fr); gap: 8px; }
-      #checksBody td[data-label]::before {
-        content: attr(data-label);
-        color: var(--muted);
-        font-size: 12px;
-        font-weight: 400;
-      }
-    }
+    /* Tips view */
+    .tips { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+    @media (max-width: 1023px) { .tips { grid-template-columns: minmax(0, 1fr); } }
+    .tips h2 { font-size: 18px; margin-bottom: 12px; }
+    .tips ol, .tips ul { margin: 0; padding-left: 20px; display: grid; gap: 8px; max-width: 68ch; }
+    .rule-table-wrap { overflow-x: auto; }
+    .rule-table { width: 100%; border-collapse: collapse; }
+    .rule-table th, .rule-table td { text-align: left; vertical-align: top; padding: 10px 12px 10px 0; border-bottom: 1px solid var(--line); }
+    .rule-table th { font-size: 13px; font-weight: 600; color: var(--muted); }
+    .rule-table td:first-child { font-weight: 500; width: 38%; padding-right: 16px; }
+    .tips .aside { margin-top: 24px; display: grid; gap: 8px; color: var(--muted); }
   </style>
 </head>
 <body>
-  <div class="accent-bar"></div>
-  <div class="nav-header">
-    <div class="container" style="padding-bottom:0;">
-      <nav>
-        <a class="nav-logo" href="https://kooexperience.com/">HK</a>
-        <div class="nav-links">
-          <a href="https://kooexperience.com/">Home</a>
-          <a href="https://github.com/haomingkoo/photo-id-studio" target="_blank" rel="noopener">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-            GitHub
-          </a>
-        </div>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="wordmark" href="/">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="5" fill="#1f5fa6"/><circle cx="12" cy="9.5" r="3.6" fill="#fff"/><path d="M5 20c.8-3.6 3.6-5.6 7-5.6s6.2 2 7 5.6" fill="#fff"/></svg>
+        Photo ID Studio
+      </a>
+      <nav class="site-nav" aria-label="Main">
+        <a href="/" id="navCheck" aria-current="page">Check a photo</a>
+        <a href="#tips" id="navTips">Photo tips</a>
+        <a href="https://github.com/haomingkoo/photo-id-studio" rel="noopener">GitHub</a>
       </nav>
     </div>
-  </div>
-  <div class="container">
+  </header>
 
-    <section class="hero">
-      <div>
-        <h1 class="hero-title">Photo Compliance Studio</h1>
-        <p class="hero-sub">Upload a photo. Get compliance checks, error codes, and a corrected output crop by country profile.</p>
+  <main id="main">
+    <section id="checkView" class="wrap">
+      <div class="page-head">
+        <h1>Will this photo pass?</h1>
+        <p>Upload a passport or IC photo. We check it against the official rules and give you a copy cropped to the right size.</p>
       </div>
-    </section>
 
-    <div class="tabs">
-      <button id="tabStudioBtn" class="tab-btn active" type="button">Studio</button>
-      <button id="tabGuideBtn" class="tab-btn" type="button">Guide & Workflow</button>
-    </div>
+      <div class="studio">
+        <section class="panel" aria-labelledby="uploadTitle">
+          <h2 id="uploadTitle" class="sr-only">Upload a photo</h2>
+          <form id="analyzeForm" class="form" novalidate>
+            <div class="field">
+              <label for="country">Document</label>
+              <select id="country" name="country_code" disabled><option>Loading documents...</option></select>
+            </div>
 
-    <section id="studioPanel" class="tab-panel">
-      <section class="layout">
-        <div class="panel">
-          <h2 class="panel-title">Upload & Rules</h2>
-          <form id="analyzeForm" class="form-grid">
             <div class="field">
-              <label for="country">Country Profile</label>
-              <select id="country" name="country_code"></select>
+              <span class="label" id="photoLabel">Photo</span>
+              <div class="drop" id="drop">
+                <input id="photo" class="sr-only" name="photo" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" aria-labelledby="photoLabel photoBtn" aria-describedby="fileName" />
+                <label for="photo" class="btn" id="photoBtn">Choose a photo</label>
+                <p class="file-name" id="fileName">Or drag one here. JPG, PNG, WEBP or HEIC.</p>
+              </div>
             </div>
-            <div class="field">
-              <label for="mode">Processing Mode</label>
-              <select id="mode" name="mode">
-                <option value="assist">Assist (crop + light, optional tone)</option>
-                <option value="strict">Strict (crop only)</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="beautyMode">Beautify (Optional)</label>
-              <select id="beautyMode" name="beauty_mode">
-                <option value="none">Off</option>
-                <option value="color">Color correction only</option>
-                <option value="soft">Soft light + smooth</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="mirrorMode">Selfie Mirror Handling</label>
-              <select id="mirrorMode" name="mirror_mode">
-                <option value="auto">Auto (detect/correct EXIF mirrored uploads)</option>
-                <option value="unmirror">Force unmirror (flip left-right)</option>
-                <option value="keep">Keep as uploaded</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="photo">Photo File</label>
-              <input id="photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" required />
-            </div>
+
             <label class="consent" for="consent">
               <input id="consent" name="consent" type="checkbox" value="true" required />
               <span>This is my photo, or I have permission from the person (or their parent or guardian if they're under 18) to process it.</span>
             </label>
-            <p class="upload-notice">Your photo is processed for this check only. It is not stored after the response and is not used for training. <a href="/privacy">Privacy notice</a> &middot; <a href="/terms">Terms</a></p>
-            <button type="submit" class="btn">Analyze Photo</button>
+
+            <p class="form-error" id="formError" role="alert"></p>
+            <button type="submit" class="btn btn-primary btn-block" id="submitBtn">Check photo</button>
+            <p class="form-note">We check your photo and discard it. It is never saved or used for training. <a href="/privacy">Privacy</a> &middot; <a href="/terms">Terms</a></p>
+
+            <details class="more">
+              <summary>More options</summary>
+              <div class="more-body">
+                <div class="field">
+                  <label for="mode">Editing</label>
+                  <select id="mode" name="mode">
+                    <option value="assist">Crop and even out the light</option>
+                    <option value="strict">Crop only</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="beautyMode">Touch-up</label>
+                  <select id="beautyMode" name="beauty_mode">
+                    <option value="none">None</option>
+                    <option value="color">Correct colour only</option>
+                    <option value="soft">Soft light and smoothing</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="mirrorMode">Mirrored selfies</label>
+                  <select id="mirrorMode" name="mirror_mode">
+                    <option value="auto">Flip back if the photo says it is mirrored</option>
+                    <option value="unmirror">Always flip left to right</option>
+                    <option value="keep">Leave as uploaded</option>
+                  </select>
+                </div>
+              </div>
+            </details>
           </form>
-          <p class="error" id="errorText"></p>
-          <div class="hint" id="profileHint">Loading profile...</div>
-          <div class="privacy-note">
-            <div id="privacySummary"><strong>Privacy:</strong> Your photo is held in server memory only while this check runs and is never written to disk.</div>
-            <div><strong>Source:</strong> <a id="privacyRepo" href="https://github.com/haomingkoo/photo-id-studio" target="_blank" rel="noopener">github.com/haomingkoo/photo-id-studio</a></div>
-            <div id="privacyDeployWrap" style="display:none;"><strong>Deployment:</strong> <a id="privacyDeploy" href="#" target="_blank" rel="noopener"></a></div>
-            <div><strong>Notice:</strong> This tool provides technical guidance and does not replace legal or immigration advice.</div>
-          </div>
-        </div>
+        </section>
 
-        <div>
-          <div class="panel">
-            <h2 class="panel-title">Result Overview</h2>
-            <div class="chips" id="summaryChips">
-              <span class="chip"><strong>Status:</strong> -</span>
-              <span class="chip"><strong>Resolution:</strong> -</span>
-              <span class="chip"><strong>Segmentation:</strong> -</span>
-              <span class="chip"><strong>Error Codes:</strong> -</span>
+        <section class="result" id="result" aria-live="polite" aria-label="Result">
+          <div class="panel" id="emptyState">
+            <div class="result-status">
+              <h2>Your result appears here</h2>
+              <p id="profileText">Loading the photo rules...</p>
             </div>
-            <div class="images">
-              <div class="img-box">
-                <div class="img-title">Original</div>
-                <img id="originalPreview" alt="Your uploaded photo" hidden />
-                <p class="img-empty" id="originalEmpty">Your photo appears here after you upload it.</p>
-              </div>
-              <div class="img-box">
-                <div class="img-title">Processed</div>
-                <img id="processedPreview" alt="Your photo, cropped to the country size" hidden />
-                <p class="img-empty" id="processedEmpty">The cropped photo appears here after the check.</p>
-              </div>
-            </div>
-            <div id="compareWrap" style="display:none; margin-bottom:12px;">
-              <div class="panel-title" id="comparePanelTitle" style="margin-bottom:8px;">Color Correction Comparison</div>
-              <div class="images">
-                <div class="img-box">
-                  <div class="img-title" id="compareLeftTitle">No Color Correction</div>
-                  <img id="compareNoColorPreview" alt="Processed without color correction" />
+            <div class="photos empty-photos" style="margin-top:24px">
+              <figure class="photo">
+                <div class="spec">
+                  <div class="ruler-x"><span id="emptyW">&nbsp;</span></div>
+                  <div class="photo-frame">
+                    <svg class="outline" viewBox="0 0 120 140" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 4" aria-hidden="true"><ellipse cx="60" cy="52" rx="26" ry="33"/><path d="M8 140c4-26 26-40 52-40s48 14 52 40"/></svg>
+                  </div>
+                  <div class="ruler-y"><span id="emptyH">&nbsp;</span></div>
                 </div>
-                <div class="img-box">
-                  <div class="img-title" id="compareRightTitle">Color Correction Applied</div>
-                  <img id="compareColorPreview" alt="Processed with color correction" />
-                </div>
+                <figcaption>Head and shoulders, facing the camera, on a plain white background.</figcaption>
+              </figure>
+              <div class="hint" style="align-self:center">
+                <p>We check the size, framing, lighting and background, then explain anything that needs fixing in plain words.</p>
+                <p style="margin-top:12px"><a href="#tips">How to take a photo that passes</a></p>
               </div>
             </div>
-            <a id="downloadBtn" class="btn" style="display:none; text-decoration:none; align-items:center; justify-content:center;">Download Processed Photo</a>
-            <div class="actions" id="actionPanel" style="display:none;">
-              <h4>What To Fix</h4>
-              <ul id="actionList"></ul>
+          </div>
+
+          <div class="panel busy" id="busyState" hidden>
+            <h2>Checking your photo</h2>
+            <p class="hint">This usually takes a few seconds.</p>
+            <div class="bar" aria-hidden="true"></div>
+          </div>
+
+          <div class="alert" id="errorState" role="alert" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 7v6M12 16.5v.5"/></svg>
+            <div>
+              <h2>We couldn't check this photo</h2>
+              <p id="errorText"></p>
+              <button type="button" class="btn" id="retryBtn" hidden>Try again</button>
             </div>
           </div>
 
-          <div class="panel" style="margin-top:14px;">
-            <h2 class="panel-title">Check Results</h2>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Error Code</th>
-                    <th>Status</th>
-                    <th>Message</th>
-                    <th>Recommended Action</th>
-                  </tr>
-                </thead>
-                <tbody id="checksBody">
-                  <tr><td colspan="4" class="muted">Upload an image to run checks.</td></tr>
-                </tbody>
-              </table>
+          <div class="panel" id="resultState" hidden>
+            <div class="verdict" id="verdict">
+              <span id="verdictIcon"></span>
+              <div>
+                <h2 id="verdictTitle"></h2>
+                <p id="verdictText"></p>
+                <p class="meta" id="verdictMeta"></p>
+              </div>
             </div>
-          </div>
-        </div>
-      </section>
-    </section>
 
-    <section id="guidePanel" class="tab-panel hidden">
-      <div class="panel">
-        <h2 class="panel-title">Guide & Workflow</h2>
-        <div class="guide-intro">
-          <p>This section explains what the system does, what each model computes, and how pass/fail decisions are made.</p>
-          <div class="guide-badges">
-            <span class="guide-badge">SG Profile</span>
-            <span class="guide-badge">Non-Generative</span>
-            <span class="guide-badge">Toggleable Segmentation</span>
-          </div>
-        </div>
+            <div class="photos" style="margin-top:24px">
+              <figure class="photo">
+                <div class="spec">
+                  <div class="ruler-x" aria-hidden="true" style="visibility:hidden"></div>
+                  <div class="photo-frame">
+                    <img id="originalPreview" alt="Your uploaded photo" hidden />
+                    <p class="photo-empty" id="originalEmpty">Your photo appears here after you upload it.</p>
+                  </div>
+                </div>
+                <figcaption><strong>Your photo</strong> <span id="originalSize"></span></figcaption>
+              </figure>
+              <figure class="photo">
+                <div class="spec">
+                  <div class="ruler-x"><span id="outW"></span></div>
+                  <div class="photo-frame">
+                    <img id="processedPreview" alt="Your photo, cropped to the required size" hidden />
+                    <p class="photo-empty" id="processedEmpty">The cropped photo appears here after the check.</p>
+                  </div>
+                  <div class="ruler-y"><span id="outH"></span></div>
+                </div>
+                <figcaption><strong>Cropped copy</strong></figcaption>
+              </figure>
+            </div>
 
-        <div class="flowchart">
-          <div class="flow-title">End-to-End Processing Flow</div>
-          <div class="flowchart-scroll">
-            <svg class="workflow-svg" viewBox="0 0 1360 170" role="img" aria-label="Photo compliance flowchart">
-              <defs>
-                <marker id="arrowHead" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-                  <path d="M0,0 L8,4 L0,8 Z" fill="#4e6a94"></path>
-                </marker>
-              </defs>
-              <text x="24" y="24" class="lane-title">Execution Order (Left to Right)</text>
+            <div class="result-actions" style="margin-top:16px">
+              <a id="downloadBtn" class="btn btn-primary" hidden>Download cropped photo</a>
+              <p class="hint">Automated guidance, not legal advice. The issuing office makes the final decision.</p>
+            </div>
 
-              <rect x="40" y="38" width="190" height="84" class="node"></rect>
-              <text x="58" y="66" class="node-title">1. Upload + Profile</text>
-              <text x="58" y="86" class="node-sub">country, mode, backend</text>
+            <div class="compare" id="compareWrap" hidden style="margin-top:24px">
+              <h3 id="compareTitle">Before and after colour correction</h3>
+              <div class="photos">
+                <figure class="photo"><div class="photo-frame"><img id="compareBefore" alt="" /></div><figcaption id="compareBeforeCap">Without correction</figcaption></figure>
+                <figure class="photo"><div class="photo-frame"><img id="compareAfter" alt="" /></div><figcaption id="compareAfterCap">With correction</figcaption></figure>
+              </div>
+            </div>
 
-              <rect x="250" y="38" width="190" height="84" class="node"></rect>
-              <text x="268" y="66" class="node-title">2. Decode + EXIF</text>
-              <text x="268" y="86" class="node-sub">orientation + resize caps</text>
-
-              <rect x="460" y="38" width="190" height="84" class="node"></rect>
-              <text x="478" y="66" class="node-title">3. Face Geometry</text>
-              <text x="478" y="86" class="node-sub">eyes, mouth, roll/yaw/pitch</text>
-
-              <rect x="670" y="38" width="190" height="84" class="node"></rect>
-              <text x="688" y="66" class="node-title">4. Segmentation</text>
-              <text x="688" y="86" class="node-sub">rembg primary + fallback</text>
-
-              <rect x="880" y="38" width="190" height="84" class="node"></rect>
-              <text x="898" y="66" class="node-title">5. Crop + Enhance</text>
-              <text x="898" y="86" class="node-sub">target size + assist options</text>
-
-              <rect x="1090" y="38" width="230" height="84" class="node"></rect>
-              <text x="1108" y="66" class="node-title">6. Report + Actions</text>
-              <text x="1108" y="86" class="node-sub">pass/review/fail + error codes</text>
-
-              <path d="M230 80 H250" class="connector"></path>
-              <path d="M440 80 H460" class="connector"></path>
-              <path d="M650 80 H670" class="connector"></path>
-              <path d="M860 80 H880" class="connector"></path>
-              <path d="M1070 80 H1090" class="connector"></path>
-            </svg>
+            <div class="checks" id="checks" style="margin-top:32px"></div>
           </div>
-          <div class="workflow-meta">
-            <p>Hard fail checks run first. Example: mouth open means FAIL even if enhancement looks good.</p>
-            <p>Edits are non-generative. The app only adjusts crop, exposure, mask compositing, and deterministic background whitening.</p>
-            <p>Segmentation prefers rembg for difficult backgrounds, with MediaPipe fallback.</p>
-          </div>
-        </div>
-
-        <div class="guide-grid">
-          <div class="panel guide-card">
-            <h3>System Goal</h3>
-            <ul>
-              <li>Primary output is a compliance decision with clear reasons.</li>
-              <li>Image enhancement is secondary and does not override failed checks.</li>
-              <li>Same input should produce the same output (deterministic pipeline).</li>
-              <li>Country rules are config-driven, so thresholds can be updated safely.</li>
-            </ul>
-          </div>
-          <div class="panel guide-card">
-            <h3>Model Choice</h3>
-            <ul>
-              <li>FaceMesh gives dense landmarks for pose, eye, mouth, and framing checks.</li>
-              <li>rembg improves person/background separation on non-flat backgrounds.</li>
-              <li>OpenCV compositing adds confidence gating and border guards on top of the selected segmentation mask.</li>
-              <li>OpenCV handles crop geometry, vertical rebalance, and assist background whitening.</li>
-            </ul>
-          </div>
-          <div class="panel guide-card">
-            <h3>Inference Internals</h3>
-            <ul>
-              <li>FaceMesh runs once per image and returns landmark points in image coordinates.</li>
-              <li>From landmarks, the app computes inter-eye distance, roll, yaw proxy, pitch proxy, and mouth gap ratio.</li>
-              <li>Segmentation path: run rembg first; use MediaPipe fallback if rembg is unavailable.</li>
-              <li>Crop pass includes iterative eye-line recentering plus segmentation-aware vertical rebalance.</li>
-              <li>Boundary guards protect shoulders/hair near frame edges during whitening.</li>
-            </ul>
-          </div>
-          <div class="panel guide-card">
-            <h3>Backend Selection</h3>
-            <ul>
-              <li>`rembg`: best quality on complex backgrounds (higher memory footprint).</li>
-              <li>`MediaPipe`: lightweight fallback when rembg is disabled or unavailable.</li>
-              <li>Backend details are logged in Result Overview and check rows.</li>
-              <li>If both are unavailable, segmentation-dependent checks become manual.</li>
-            </ul>
-          </div>
-          <div class="panel guide-card">
-            <h3>Fallback Matrix</h3>
-            <ul>
-              <li>If segmentation backend is unavailable: run checks without segmentation-dependent steps.</li>
-              <li>If crop cannot fit in bounds: return `CROP_OUT_OF_BOUNDS` and no processed output.</li>
-              <li>If face is not detected: stop geometric checks and return `NO_FACE_DETECTED`.</li>
-              <li>If there are multiple faces: return `MULTIPLE_FACES_DETECTED` and stop.</li>
-              <li>Backend used is always logged in result chips and check details.</li>
-            </ul>
-          </div>
-          <div class="panel guide-card">
-            <h3>Thought Process Per Step</h3>
-            <ul>
-              <li>Decode + EXIF first so orientation and mirrored selfie flags are handled before any geometry logic.</li>
-              <li>Run face geometry before enhancement so pass/fail is based on source photo quality, not edited output.</li>
-              <li>Use segmentation for compliance checks and assist whitening; output never uses generative repaint.</li>
-              <li>Run crop after quality checks so the output matches country dimensions and head-size constraints.</li>
-              <li>Apply beautify last and keep it optional so compliance and appearance remain separate decisions.</li>
-            </ul>
-          </div>
-          <div class="panel guide-card">
-            <h3>Capture Checklist</h3>
-            <ul>
-              <li>Use eye-level camera with full frontal face and eyes looking at lens.</li>
-              <li>Maintain neutral expression with mouth closed.</li>
-              <li>Include full hair and shoulders with some chest area.</li>
-              <li>Use plain bright background and soft front lighting.</li>
-              <li>Upload original files and avoid compressed screenshots.</li>
-            </ul>
-          </div>
-          <div class="panel guide-card">
-            <h3>Validation Layers</h3>
-            <ul>
-              <li>Input checks: file type, source resolution, and capture-date metadata.</li>
-              <li>Face checks: pose, eye visibility, mouth closed, and face size.</li>
-              <li>Background checks: brightness, saturation, lighting spread, text/watermark.</li>
-              <li>Crop checks: target aspect, head size in output, and bounds safety.</li>
-              <li>For each failed/warned check, the app returns an action message.</li>
-            </ul>
-          </div>
-          <div class="panel guide-card">
-            <h3>Key Formulas</h3>
-            <ul>
-              <li>EAR (eye openness) = (|p2-p6| + |p3-p5|) / (2 * |p1-p4|).</li>
-              <li>Mouth score = |upper_lip - lower_lip| / inter_eye_distance.</li>
-              <li>Yaw proxy = horizontal nose offset from eye midpoint, normalized by eye width.</li>
-              <li>Pitch proxy = vertical nose position between eye line and mouth line.</li>
-              <li>Blur score = variance(Laplacian(face ROI)); lower value means blurrier image.</li>
-            </ul>
-          </div>
-          <div class="panel guide-card">
-            <h3>System Architecture</h3>
-            <ul>
-              <li>Frontend: single-page HTML/CSS/JS, no framework dependency.</li>
-              <li>API: FastAPI `/api/analyze` and `/api/countries`.</li>
-              <li>CV: MediaPipe FaceMesh + rembg/MediaPipe segmentation + OpenCV post-process.</li>
-              <li>Post-process: OpenCV crop + assist whitening (when mask exists) + optional beautify (no subject-edge repaint).</li>
-              <li>Deploy: one service container via Uvicorn behind HTTPS.</li>
-            </ul>
-          </div>
-          <div class="panel guide-card">
-            <h3>Performance Strategy</h3>
-            <ul>
-              <li>Large images are downscaled before model inference to reduce CPU and memory cost.</li>
-              <li>Source metadata and source resolution are still tracked for rule checks.</li>
-              <li>Output size is fixed by profile (SG is 400x514).</li>
-              <li>Preview image is capped to reduce response payload size.</li>
-              <li>Caps are set via env vars (`MAX_PROCESSING_LONG_SIDE`, `MAX_PROCESSING_MEGAPIXELS`, `MAX_PREVIEW_LONG_SIDE`).</li>
-            </ul>
-          </div>
-          <div class="panel guide-card">
-            <h3>Runbook</h3>
-            <ul>
-              <li>rembg can be enabled for quality and configured to unload after idle timeout.</li>
-              <li>If status is `FAIL`, fix fail codes first, then do visual tuning.</li>
-              <li>If shoulders/hair edges look wrong, retake instead of forcing synthetic cleanup.</li>
-              <li>Retake if hair/shoulders are clipped instead of forcing cleanup.</li>
-              <li>Review top fail codes regularly and tune thresholds with real samples.</li>
-            </ul>
-          </div>
-        </div>
-        <div class="guide-note">
-          Practical note: the cleanest results still come from good source capture (front light, plain wall, stable camera).
-        </div>
+        </section>
       </div>
     </section>
 
-    <footer class="site-footer">
-      <a href="/privacy">Privacy notice</a>
-      <a href="/terms">Terms of use</a>
-      <span>Report misuse: <a href="mailto:privacy@kooexperience.com">privacy@kooexperience.com</a></span>
-    </footer>
-  </div>
+    <section id="tipsView" class="wrap" hidden>
+      <div class="page-head">
+        <h1>How to take a photo that passes</h1>
+        <p>A phone, a plain wall and soft daylight are enough. Follow these steps, then check the photo here.</p>
+      </div>
+      <div class="tips">
+        <section class="panel">
+          <h2>Taking the photo</h2>
+          <ol>
+            <li>Stand about half a metre in front of a plain white or off-white wall.</li>
+            <li>Face a window or a soft lamp so light falls evenly on both sides of your face.</li>
+            <li>Ask someone to hold the phone at your eye level, or prop it up and use the timer.</li>
+            <li>Use the rear camera if you can. If you use the front camera, turn off mirroring.</li>
+            <li>Look straight at the lens with your mouth closed and both eyes open.</li>
+            <li>Keep your whole head, your hair and both shoulders in the frame, with space above your head.</li>
+            <li>Upload the original photo file, not a screenshot or a photo sent through a chat app.</li>
+          </ol>
+          <p style="margin-top:24px"><a class="btn btn-primary" href="/" id="tipsCheck">Check a photo</a></p>
+        </section>
+        <section class="panel">
+          <h2>What we check</h2>
+          <div class="rule-table-wrap">
+            <table class="rule-table">
+              <thead><tr><th scope="col">Check</th><th scope="col">What passes</th></tr></thead>
+              <tbody>
+                <tr><td>Size</td><td>The photo is large enough to crop to the document's exact pixel size.</td></tr>
+                <tr><td>One face</td><td>Exactly one person, facing the camera.</td></tr>
+                <tr><td>Pose</td><td>Head straight, chin level, eyes open, mouth closed.</td></tr>
+                <tr><td>Framing</td><td>Your head fills the right share of the frame, with hair and shoulders showing.</td></tr>
+                <tr><td>Sharpness and light</td><td>Your face is in focus, evenly lit, and not too dark or too bright.</td></tr>
+                <tr><td>Background</td><td>Plain and bright, with no text or watermarks.</td></tr>
+                <tr><td>Date</td><td>Taken recently, if the photo's date is saved in the file.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="aside">
+            <p>We only crop the photo and adjust its light and colour. We never redraw your face or background.</p>
+            <p>Automated checks can miss things. Always read the issuing office's own rules before you apply.</p>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <span>&copy; 2026 Haoming Koo</span><span class="sep" aria-hidden="true">&middot;</span>
+      <a href="/privacy">Privacy</a><span class="sep" aria-hidden="true">&middot;</span>
+      <a href="/terms">Terms</a><span class="sep" aria-hidden="true">&middot;</span>
+      <span>Contact (<a href="mailto:privacy@kooexperience.com">privacy@kooexperience.com</a>)</span><span class="sep" aria-hidden="true">&middot;</span>
+      <span>More projects &rarr; <a href="https://kooexperience.com/">kooexperience.com</a></span>
+    </div>
+  </footer>
 
   <script>
-    const countrySelect = document.getElementById('country');
-    const profileHint = document.getElementById('profileHint');
-    const form = document.getElementById('analyzeForm');
-    const errorText = document.getElementById('errorText');
-    const checksBody = document.getElementById('checksBody');
-    const summaryChips = document.getElementById('summaryChips');
-    const actionPanel = document.getElementById('actionPanel');
-    const actionList = document.getElementById('actionList');
-    const originalPreview = document.getElementById('originalPreview');
-    const processedPreview = document.getElementById('processedPreview');
-    const compareWrap = document.getElementById('compareWrap');
-    const compareNoColorPreview = document.getElementById('compareNoColorPreview');
-    const compareColorPreview = document.getElementById('compareColorPreview');
-    const comparePanelTitle = document.getElementById('comparePanelTitle');
-    const compareLeftTitle = document.getElementById('compareLeftTitle');
-    const compareRightTitle = document.getElementById('compareRightTitle');
-    const downloadBtn = document.getElementById('downloadBtn');
-    const privacySummary = document.getElementById('privacySummary');
-    const privacyRepo = document.getElementById('privacyRepo');
-    const privacyDeploy = document.getElementById('privacyDeploy');
-    const privacyDeployWrap = document.getElementById('privacyDeployWrap');
-    const tabStudioBtn = document.getElementById('tabStudioBtn');
-    const tabGuideBtn = document.getElementById('tabGuideBtn');
-    const studioPanel = document.getElementById('studioPanel');
-    const guidePanel = document.getElementById('guidePanel');
-    const originalEmpty = document.getElementById('originalEmpty');
-    const processedEmpty = document.getElementById('processedEmpty');
+    const $ = (id) => document.getElementById(id);
+    const form = $('analyzeForm');
+    const countrySelect = $('country');
+    const photoInput = $('photo');
+    const drop = $('drop');
+    const consentBox = $('consent');
+    const submitBtn = $('submitBtn');
+    const states = { empty: $('emptyState'), busy: $('busyState'), error: $('errorState'), result: $('resultState') };
+    let countryData = [];
+
+    const ICONS = {
+      pass: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M7.5 12.5l3 3 6-6.5"/></svg>',
+      fail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7"/></svg>',
+      warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l10 18H2z" stroke-linejoin="round"/><path d="M12 10v5M12 18v.5"/></svg>',
+      manual: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 11v6M12 7.5v.5"/></svg>',
+    };
+    ICONS.review = ICONS.warn;
+
+    // Plain-language text for every check the server can return: [title, guidance].
+    // null marks an internal processing step that is not shown.
+    const num = (s, re) => { const m = (s || '').match(re); return m ? m[1] : null; };
+    const CHECKS = {
+      FILE_FORMAT_OK: ['File type accepted'],
+      FILE_FORMAT_UNSUPPORTED: ['We can\'t read this file type', 'Upload a JPG, PNG, WEBP or HEIC photo.'],
+      FILE_SIZE_TOO_LARGE: ['The file is too large', (c, p) => `Save a smaller copy, under ${p ? p.max_file_size_mb : 8} MB, and upload that.`],
+      PROCESSING_DOWNSCALED: null,
+      INPUT_RESOLUTION_OK: ['The photo is large enough'],
+      INPUT_RESOLUTION_TOO_LOW: ['The photo is too small', (c) => {
+        const m = (c.message || '').match(/(\d+)x(\d+).*?(\d+)x(\d+)/);
+        return m ? `Your photo is ${m[1]} × ${m[2]} pixels. It needs to be at least ${m[3]} × ${m[4]}. Retake it with your phone's main camera.` : 'Retake it with your phone\'s main camera, at full resolution.';
+      }],
+      TEXT_OVERLAY_OK: ['No text or watermark'],
+      TEXT_OR_WATERMARK_DETECTED: ['Text or a watermark is visible', 'Use an original photo with no logos, dates or watermarks on it.'],
+      POSSIBLE_TEXT_OVERLAY: ['There may be text in the photo', 'Make sure nothing is written on the photo or on the wall behind you.'],
+      POSSIBLE_MIRRORED_IMAGE: ['The photo looks mirrored', 'Turn off mirroring on your front camera, or open More options and choose to flip it back.'],
+      MIRROR_CORRECTION_APPLIED: ['Mirrored selfie flipped back'],
+      MIRROR_ADJUSTMENT_APPLIED: ['Photo flipped left to right, as you asked'],
+      PHOTO_RECENCY_OK: ['Taken recently'],
+      PHOTO_TOO_OLD: ['The photo looks too old', (c) => {
+        const age = num(c.message, /~?(\d+) days/); const max = num(c.action, /within (\d+) days/);
+        return `The file says it was taken${age ? ` about ${age} days ago` : ' too long ago'}. Use a photo taken within ${max || 'the last 90'} days.`;
+      }],
+      PHOTO_RECENCY_UNKNOWN: ['We can\'t tell when it was taken', (c) => `The file has no date. Make sure the photo was taken within the last ${num(c.action, /within (\d+) days/) || 90} days.`],
+      DETECTION_BACKEND_UNAVAILABLE: ['We couldn\'t run the face checks', 'Something went wrong on our side. Try again in a few minutes.'],
+      NO_FACE_DETECTED: ['No face found', 'Use a clear photo facing the camera, with your whole head and shoulders in the frame.'],
+      MULTIPLE_FACES_DETECTED: ['More than one face found', 'Retake the photo with only you in the frame.'],
+      FACE_SCALE_OK: ['Your face is large enough'],
+      FACE_TOO_SMALL: ['Your face is too small in the photo', 'Move closer to the camera and retake it.'],
+      HEAD_ROLL_OK: ['Head is straight'],
+      HEAD_ROLL_TOO_HIGH: ['Your head is tilted', 'Keep your head straight and hold the camera level.'],
+      HEAD_YAW_OK: ['Facing the camera'],
+      HEAD_YAW_TOO_HIGH: ['You are turned away from the camera', 'Face the lens directly, so both sides of your face show equally.'],
+      HEAD_PITCH_OK: ['Chin is level'],
+      HEAD_PITCH_TOO_HIGH: ['Your chin is too high or too low', 'Keep your chin level and look straight into the lens.'],
+      EYES_VISIBLE_OK: ['Eyes are open and visible'],
+      EYES_NOT_CLEARLY_VISIBLE: ['Your eyes aren\'t clearly visible', 'Keep both eyes fully open. If you wear glasses, make sure there is no glare.'],
+      MOUTH_CLOSED_OK: ['Mouth closed, neutral expression'],
+      MOUTH_NOT_CLOSED: ['Your mouth looks open', 'Close your mouth and keep a neutral expression.'],
+      IMAGE_SHARPNESS_OK: ['Sharp enough'],
+      IMAGE_BLUR_TOO_HIGH: ['The photo is blurry', 'Hold the camera still, tap your face to focus, and add more light.'],
+      IMAGE_BLUR_BORDERLINE: ['The photo is slightly soft', 'A sharper photo is safer. Add more light and keep the camera still.'],
+      LIGHTING_OK: ['Lighting is even'],
+      LIGHTING_NOT_EVEN: ['Lighting is uneven', 'Face a window or a soft lamp so neither side of your face is in shadow.'],
+      SEGMENTATION_BACKEND_USED: null,
+      SEGMENTATION_BACKEND_FALLBACK: null,
+      BACKGROUND_OK: ['Background is plain and bright'],
+      BACKGROUND_NOT_COMPLIANT: ['The background may not be plain white', 'Stand in front of a plain white wall with even light on it.'],
+      HEAD_SHOULDERS_VISIBILITY_OK: ['Head and shoulders are in the frame'],
+      HEAD_SHOULDERS_PARTIAL: ['Your hair or shoulders may be cut off', 'Leave space above your head and keep both shoulders in the frame.'],
+      SEGMENTATION_UNAVAILABLE: ['We couldn\'t check the background', 'Check it yourself: a plain white wall, with both shoulders showing.'],
+      EXPOSURE_EXTREME: ['The photo is too dark or too bright', 'Retake it in even indoor light, without a bright window behind you.'],
+      CROP_OUT_OF_BOUNDS: ['We couldn\'t crop the photo to size', 'Step back so there is space around your head and shoulders, then retake it.'],
+      CROP_RECENTERED: null,
+      CROP_VERTICAL_REBALANCED: null,
+      CROP_ADJUSTED_TO_FRAME: ['The crop was tight around your head', 'Step back slightly next time so the crop has more room.'],
+      FACE_HEIGHT_OK: ['Head size fits the rules'],
+      FACE_HEIGHT_TOO_SMALL: ['Your head is too small in the cropped photo', 'Move closer to the camera before you take the photo.'],
+      FACE_HEIGHT_BORDERLINE: ['Your head is a little small in the cropped photo', 'Move slightly closer for a fuller head-and-shoulders frame.'],
+      FACE_HEIGHT_TOO_LARGE: ['Your head is too large in the cropped photo', 'Step back a little so more of your shoulders show.'],
+      CROP_OK: ['Cropped to the exact size', (c, p) => p ? `${p.output_width_px} × ${p.output_height_px} pixels.` : ''],
+    };
+
+    function describe(check, profile) {
+      const entry = CHECKS[check.code];
+      if (entry === null) return null;
+      if (!entry) {
+        // A check this page does not know yet: use the server's own sentences.
+        const action = check.action && check.action !== 'No action needed.' ? check.action : '';
+        return { title: check.message, guide: action };
+      }
+      const g = typeof entry[1] === 'function' ? entry[1](check, profile) : (entry[1] || '');
+      return { title: entry[0], guide: check.status === 'pass' && check.code !== 'CROP_OK' ? '' : g };
+    }
+
+    function show(name) {
+      Object.entries(states).forEach(([k, el]) => { el.hidden = k !== name; });
+    }
+
+    function currentProfile() {
+      return countryData.find((c) => c.code === countrySelect.value);
+    }
+
+    function renderProfile() {
+      const p = currentProfile();
+      if (!p) return;
+      $('profileText').textContent = `${p.name}: the cropped copy will be ${p.output_width_px} × ${p.output_height_px} pixels. Upload a file under ${p.max_file_size_mb} MB.`;
+      $('emptyW').textContent = `${p.output_width_px} px`;
+      $('emptyH').textContent = `${p.output_height_px} px`;
+      setFrameRatio(p);
+    }
+
+    // Spec frames take the document's real proportions.
+    function setFrameRatio(p) {
+      document.querySelectorAll('.spec .photo-frame').forEach((f) => { f.style.aspectRatio = `${p.output_width_px} / ${p.output_height_px}`; });
+    }
+
+    async function loadCountries() {
+      countrySelect.disabled = true;
+      try {
+        const response = await fetch('/api/countries');
+        if (!response.ok) throw new Error();
+        countryData = await response.json();
+        countrySelect.replaceChildren(...countryData.map((item) => new Option(item.name, item.code)));
+        countrySelect.disabled = false;
+        renderProfile();
+      } catch (_) {
+        countrySelect.replaceChildren(new Option('Could not load documents', ''));
+        $('profileText').textContent = 'We could not load the photo rules. Check your connection and reload the page.';
+      }
+    }
 
     function setPreview(img, empty, src, emptyText) {
-      if (src) {
-        img.src = src;
-      } else {
-        img.removeAttribute('src');
-        empty.textContent = emptyText;
-      }
+      if (src) img.src = src; else { img.removeAttribute('src'); if (emptyText) empty.textContent = emptyText; }
       img.hidden = !src;
       empty.hidden = !!src;
     }
 
-    originalPreview.addEventListener('error', () => {
-      // Some browsers cannot render HEIC blobs directly; backend fallback preview is used after analyze.
-      setPreview(originalPreview, originalEmpty, null, 'This browser cannot preview the file. The check still runs.');
+    function setFile(file) {
+      if (!file) { $('fileName').textContent = 'Or drag one here. JPG, PNG, WEBP or HEIC.'; return; }
+      const size = file.size < 1048576 ? `${Math.max(1, Math.round(file.size / 1024))} KB` : `${(file.size / 1048576).toFixed(1)} MB`;
+      $('fileName').replaceChildren(Object.assign(document.createElement('strong'), { textContent: file.name }), document.createTextNode(` (${size})`));
+      $('photoBtn').textContent = 'Choose a different photo';
+      $('formError').textContent = '';
+    }
+
+    photoInput.addEventListener('change', () => setFile(photoInput.files[0]));
+    ['dragenter', 'dragover'].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add('is-over'); }));
+    ['dragleave', 'drop'].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove('is-over'); }));
+    drop.addEventListener('drop', (e) => {
+      const file = e.dataTransfer.files[0];
+      if (!file) return;
+      const dt = new DataTransfer(); dt.items.add(file); photoInput.files = dt.files; setFile(file);
     });
+    countrySelect.addEventListener('change', renderProfile);
+    consentBox.addEventListener('change', () => { if (consentBox.checked) $('formError').textContent = ''; });
 
-    let countryData = [];
-
-    function activateTab(tabName) {
-      const isGuide = tabName === 'guide';
-      tabStudioBtn.classList.toggle('active', !isGuide);
-      tabGuideBtn.classList.toggle('active', isGuide);
-      studioPanel.classList.toggle('hidden', isGuide);
-      guidePanel.classList.toggle('hidden', !isGuide);
+    function errorMessage(status, payload) {
+      const p = currentProfile();
+      const detail = payload.detail || '';
+      if (status === 400 && /consent/i.test(detail)) return 'Tick the box to confirm you have permission to use this photo.';
+      if (status === 400 && /empty/i.test(detail)) return 'That file is empty. Choose the photo again.';
+      if (status === 400) return 'We could not read this image. Try saving it as a JPG and uploading it again.';
+      if (status === 413) return `This file is too large. Upload a photo under ${p ? p.max_file_size_mb : 8} MB.`;
+      if (status === 415) return 'We can only check JPG, PNG, WEBP and HEIC photos.';
+      if (status === 429) return 'Too many checks in a short time. Wait a minute, then try again.';
+      return 'Something went wrong on our side. Wait a minute, then try again.';
     }
 
-    tabStudioBtn.addEventListener('click', () => activateTab('studio'));
-    tabGuideBtn.addEventListener('click', () => activateTab('guide'));
-
-    function statusClass(status) {
-      if (status === 'pass') return 'check-pass';
-      if (status === 'fail') return 'check-fail';
-      if (status === 'warn') return 'check-warn';
-      return 'check-manual';
+    function showError(message, canRetry) {
+      $('errorText').textContent = message;
+      $('retryBtn').hidden = !canRetry;
+      show('error');
     }
 
-    function clearChildren(node) {
-      node.replaceChildren();
+    function renderChecks(report, profile) {
+      const groups = { fail: [], attention: [], pass: [] };
+      const seen = new Set();
+      report.checks.forEach((check) => {
+        const d = describe(check, profile);
+        if (!d || seen.has(d.title)) return;
+        seen.add(d.title);
+        const item = { ...d, status: check.status, code: check.code };
+        if (check.status === 'fail') groups.fail.push(item);
+        else if (check.status === 'pass') groups.pass.push(item);
+        else groups.attention.push(item);
+      });
+
+      const list = (items) => {
+        const ul = document.createElement('ul'); ul.className = 'check-list';
+        items.forEach((it) => {
+          const li = document.createElement('li'); li.className = `s-${it.status}`; li.dataset.code = it.code;
+          li.innerHTML = ICONS[it.status] || ICONS.manual;
+          const body = document.createElement('div');
+          const t = document.createElement('p'); t.className = 't'; t.textContent = it.title; body.appendChild(t);
+          if (it.guide) { const g = document.createElement('p'); g.className = 'g'; g.textContent = it.guide; body.appendChild(g); }
+          li.appendChild(body); ul.appendChild(li);
+        });
+        return ul;
+      };
+      const heading = (el, title, n) => {
+        el.textContent = `${title} `;
+        const c = document.createElement('span'); c.className = 'count'; c.textContent = n; el.appendChild(c);
+      };
+      const group = (title, items) => {
+        const sec = document.createElement('section'); sec.className = 'check-group';
+        const h = document.createElement('h3'); heading(h, title, items.length);
+        sec.append(h, list(items));
+        return sec;
+      };
+
+      const box = $('checks');
+      box.replaceChildren();
+      if (groups.fail.length) box.appendChild(group('Needs fixing', groups.fail));
+      if (groups.attention.length) box.appendChild(group('Worth checking', groups.attention));
+      if (groups.pass.length) {
+        const det = document.createElement('details'); det.className = 'passed check-group';
+        det.open = !groups.fail.length && !groups.attention.length;
+        const sum = document.createElement('summary'); heading(sum, 'Passed', groups.pass.length);
+        det.append(sum, list(groups.pass));
+        box.appendChild(det);
+      }
+      return groups;
     }
 
-    function appendText(parent, text) {
-      parent.appendChild(document.createTextNode(text));
-    }
-
-    function createChip(label, value) {
-      const chip = document.createElement('span');
-      chip.className = 'chip';
-
-      const strong = document.createElement('strong');
-      strong.textContent = `${label}:`;
-      chip.appendChild(strong);
-      appendText(chip, ' ');
-
-      if (typeof value === 'string') {
-        appendText(chip, value);
+    function renderVerdict(report, groups) {
+      const status = report.overall_status;
+      $('verdict').className = `verdict ${status}`;
+      $('verdictIcon').innerHTML = ICONS[status];
+      const fixes = groups.fail.length, checks = groups.attention.length;
+      if (status === 'pass') {
+        $('verdictTitle').textContent = 'This photo meets the rules we check';
+        $('verdictText').textContent = 'Download the cropped copy below.';
+      } else if (status === 'review') {
+        $('verdictTitle').textContent = checks === 1 ? 'Almost there: check 1 thing' : `Almost there: check ${checks} things`;
+        $('verdictText').textContent = 'None of these is a definite rejection. Read each point under Worth checking before you use the photo.';
       } else {
-        chip.appendChild(value);
+        $('verdictTitle').textContent = 'This photo is likely to be rejected';
+        $('verdictText').textContent = `Fix ${fixes === 1 ? 'the problem' : `the ${fixes} problems`} under Needs fixing, then take a new photo.`;
       }
-      return chip;
+      $('verdictMeta').textContent = `Checked against ${report.country_name} rules`;
     }
-
-    function renderSummaryChips(report) {
-      clearChildren(summaryChips);
-
-      const statusLabel = report.overall_status.toUpperCase();
-      const statusClassName = report.overall_status === 'pass'
-        ? 'status-pass'
-        : (report.overall_status === 'fail' ? 'status-fail' : 'status-review');
-      const statusPill = document.createElement('span');
-      statusPill.className = `status-pill ${statusClassName}`;
-      statusPill.textContent = statusLabel;
-
-      summaryChips.appendChild(createChip('Status', statusPill));
-      summaryChips.appendChild(createChip('Resolution', `${report.width}x${report.height}`));
-      summaryChips.appendChild(createChip('Segmentation', report.segmentation_backend || 'N/A'));
-      const mirrorCode = (report.checks || []).map(item => item.code);
-      let mirrorLabel = 'No mirror issue';
-      if (mirrorCode.includes('MIRROR_CORRECTION_APPLIED')) mirrorLabel = 'Detected + corrected';
-      else if (mirrorCode.includes('MIRROR_ADJUSTMENT_APPLIED')) mirrorLabel = 'Manual unmirror applied';
-      else if (mirrorCode.includes('POSSIBLE_MIRRORED_IMAGE')) mirrorLabel = 'Detected (not corrected)';
-      summaryChips.appendChild(createChip('Mirror', mirrorLabel));
-      summaryChips.appendChild(
-        createChip('Error Codes', report.error_codes.length ? report.error_codes.join(', ') : 'None')
-      );
-    }
-
-    function appendCheckRow(check) {
-      const row = document.createElement('tr');
-
-      const codeCell = document.createElement('td');
-      codeCell.className = 'check-code';
-      codeCell.dataset.label = 'Code';
-      // Allow line breaks after underscores so long codes wrap at word boundaries.
-      check.code.split('_').forEach((part, i, parts) => {
-        appendText(codeCell, i < parts.length - 1 ? `${part}_` : part);
-        if (i < parts.length - 1) codeCell.appendChild(document.createElement('wbr'));
-      });
-      row.appendChild(codeCell);
-
-      const statusCell = document.createElement('td');
-      statusCell.dataset.label = 'Status';
-      statusCell.className = statusClass(check.status);
-      statusCell.textContent = check.status.toUpperCase();
-      row.appendChild(statusCell);
-
-      const messageCell = document.createElement('td');
-      messageCell.dataset.label = 'Problem';
-      messageCell.textContent = check.message;
-      row.appendChild(messageCell);
-
-      const actionCell = document.createElement('td');
-      actionCell.dataset.label = 'What to do';
-      actionCell.textContent = check.action;
-      row.appendChild(actionCell);
-
-      checksBody.appendChild(row);
-    }
-
-    function renderProfileHint(code) {
-      const profile = countryData.find(item => item.code === code);
-      if (!profile) {
-        profileHint.textContent = 'Country profile unavailable.';
-        return;
-      }
-      profileHint.textContent = `${profile.name}: output ${profile.output_width_px}x${profile.output_height_px}px, max ${profile.max_file_size_mb}MB, formats ${profile.allowed_extensions.join(', ')}`;
-    }
-
-    async function loadCountries() {
-      const response = await fetch('/api/countries');
-      countryData = await response.json();
-      clearChildren(countrySelect);
-      countryData.forEach(item => {
-        const option = document.createElement('option');
-        option.value = item.code;
-        option.textContent = `${item.code} - ${item.name}`;
-        countrySelect.appendChild(option);
-      });
-      if (countryData.length > 0) {
-        countrySelect.value = countryData[0].code;
-        renderProfileHint(countryData[0].code);
-      }
-    }
-
-    async function loadPrivacyNotice() {
-      try {
-        const response = await fetch('/api/privacy');
-        if (!response.ok) {
-          return;
-        }
-        const payload = await response.json();
-        if (payload.retention_policy) {
-          privacySummary.textContent = `Privacy: ${payload.retention_policy}`;
-        }
-        if (payload.repo_url) {
-          privacyRepo.href = payload.repo_url;
-          privacyRepo.textContent = payload.repo_url.replace(/^https?:\/\//, '');
-        }
-        if (payload.app_url) {
-          privacyDeploy.href = payload.app_url;
-          privacyDeploy.textContent = payload.app_url;
-          privacyDeployWrap.style.display = 'block';
-        } else {
-          privacyDeployWrap.style.display = 'none';
-        }
-      } catch (_) {
-        // Keep default static notice if privacy metadata call fails.
-      }
-    }
-
-    countrySelect.addEventListener('change', () => renderProfileHint(countrySelect.value));
 
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
-      errorText.textContent = '';
-
-      const file = document.getElementById('photo').files[0];
-      if (!file) {
-        errorText.textContent = 'Please select a photo first.';
-        return;
-      }
-      const consentBox = document.getElementById('consent');
-      if (!consentBox.checked) {
-        errorText.textContent = 'Please confirm you have permission to process this photo.';
-        consentBox.focus();
-        return;
-      }
+      const file = photoInput.files[0];
+      const formError = $('formError');
+      if (!file) { formError.textContent = 'Choose a photo first.'; photoInput.focus(); return; }
+      if (!consentBox.checked) { formError.textContent = 'Tick the box to confirm you have permission to use this photo.'; consentBox.focus(); return; }
+      formError.textContent = '';
 
       const fd = new FormData();
       fd.append('photo', file);
       fd.append('country_code', countrySelect.value);
-      fd.append('mode', document.getElementById('mode').value);
-      fd.append('beauty_mode', document.getElementById('beautyMode').value);
-      fd.append('mirror_mode', document.getElementById('mirrorMode').value);
+      fd.append('mode', $('mode').value);
+      fd.append('beauty_mode', $('beautyMode').value);
+      fd.append('mirror_mode', $('mirrorMode').value);
       fd.append('consent', 'true');
 
-      const localPreviewUrl = URL.createObjectURL(file);
-      setPreview(originalPreview, originalEmpty, localPreviewUrl);
-      setPreview(processedPreview, processedEmpty, null, 'Checking your photo...');
-      compareNoColorPreview.removeAttribute('src');
-      compareColorPreview.removeAttribute('src');
-      comparePanelTitle.textContent = 'Color Correction Comparison';
-      compareLeftTitle.textContent = 'No Color Correction';
-      compareRightTitle.textContent = 'Color Correction Applied';
-      compareWrap.style.display = 'none';
-      downloadBtn.style.display = 'none';
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Checking...';
+      show('busy');
+      if (window.matchMedia('(max-width: 1023px)').matches) states.busy.scrollIntoView({ block: 'nearest' });
 
       try {
         const response = await fetch('/api/analyze', { method: 'POST', body: fd });
-        const payload = await response.json();
-        if (!response.ok) {
-          errorText.textContent = payload.detail || payload.error || 'Analysis failed.';
-          setPreview(processedPreview, processedEmpty, null, 'No cropped photo, because the check did not run.');
-          return;
-        }
+        let payload = {};
+        try { payload = await response.json(); } catch (_) { /* non-JSON error page */ }
+        if (!response.ok) { showError(errorMessage(response.status, payload), response.status >= 429); return; }
 
         const report = payload.report;
-        if (payload.original_image_base64) {
-          setPreview(originalPreview, originalEmpty, `data:${payload.original_image_mime || 'image/jpeg'};base64,${payload.original_image_base64}`);
-        }
-        renderSummaryChips(report);
+        const profile = countryData.find((c) => c.code === report.country_code) || currentProfile();
+        const origSrc = payload.original_image_base64
+          ? `data:${payload.original_image_mime || 'image/jpeg'};base64,${payload.original_image_base64}` : null;
+        setPreview($('originalPreview'), $('originalEmpty'), origSrc, 'This browser cannot preview the file. The check still ran.');
+        $('originalSize').textContent = `${report.width} × ${report.height} px`;
+        $('outW').textContent = profile ? `${profile.output_width_px} px` : '';
+        $('outH').textContent = profile ? `${profile.output_height_px} px` : '';
+        if (profile) setFrameRatio(profile);
 
-        clearChildren(checksBody);
-        report.checks.forEach(appendCheckRow);
-
-        clearChildren(actionList);
-        if (report.actions && report.actions.length) {
-          report.actions.forEach(action => {
-            const li = document.createElement('li');
-            li.textContent = action;
-            actionList.appendChild(li);
-          });
-          actionPanel.style.display = 'block';
-        } else {
-          actionPanel.style.display = 'none';
-        }
-
+        const dl = $('downloadBtn');
         if (payload.processed_image_base64) {
-          const imageUrl = `data:${payload.processed_image_mime || 'image/jpeg'};base64,${payload.processed_image_base64}`;
-          setPreview(processedPreview, processedEmpty, imageUrl);
-          downloadBtn.href = imageUrl;
-          downloadBtn.download = 'photo-compliance-output.jpg';
-          downloadBtn.style.display = 'inline-flex';
+          const url = `data:${payload.processed_image_mime || 'image/jpeg'};base64,${payload.processed_image_base64}`;
+          setPreview($('processedPreview'), $('processedEmpty'), url);
+          dl.href = url; dl.download = 'passport-photo.jpg'; dl.hidden = false;
         } else {
           const noFace = (report.error_codes || []).includes('NO_FACE_DETECTED');
-          setPreview(processedPreview, processedEmpty, null, noFace
-            ? 'No cropped photo, because no face was found.'
-            : 'No cropped photo for this upload. See the checks below.');
+          setPreview($('processedPreview'), $('processedEmpty'), null, noFace
+            ? 'No cropped copy, because no face was found.'
+            : 'No cropped copy for this photo. See what to fix below.');
+          dl.hidden = true;
         }
 
+        const cmp = $('compareWrap');
         if (payload.comparison_no_correction_base64 && payload.comparison_color_correction_base64) {
-          const beautyMode = document.getElementById('beautyMode').value;
-          if (beautyMode === 'soft') {
-            comparePanelTitle.textContent = 'Soft Beautify Comparison';
-            compareLeftTitle.textContent = 'Baseline (No Beautify)';
-            compareRightTitle.textContent = 'Soft Light + Smooth Applied';
-          } else {
-            comparePanelTitle.textContent = 'Color Correction Comparison';
-            compareLeftTitle.textContent = 'No Color Correction';
-            compareRightTitle.textContent = 'Color Correction Applied';
-          }
+          const soft = $('beautyMode').value === 'soft';
+          $('compareTitle').textContent = soft ? 'Before and after soft light and smoothing' : 'Before and after colour correction';
+          $('compareBeforeCap').textContent = soft ? 'Without touch-up' : 'Without correction';
+          $('compareAfterCap').textContent = soft ? 'With touch-up' : 'With correction';
           const mime = payload.comparison_image_mime || 'image/jpeg';
-          compareNoColorPreview.src = `data:${mime};base64,${payload.comparison_no_correction_base64}`;
-          compareColorPreview.src = `data:${mime};base64,${payload.comparison_color_correction_base64}`;
-          compareWrap.style.display = 'block';
+          $('compareBefore').src = `data:${mime};base64,${payload.comparison_no_correction_base64}`;
+          $('compareAfter').src = `data:${mime};base64,${payload.comparison_color_correction_base64}`;
+          $('compareBefore').alt = $('compareBeforeCap').textContent;
+          $('compareAfter').alt = $('compareAfterCap').textContent;
+          cmp.hidden = false;
         } else {
-          compareWrap.style.display = 'none';
+          cmp.hidden = true;
         }
-      } catch (error) {
-        errorText.textContent = `Request failed: ${error.message}`;
-        setPreview(processedPreview, processedEmpty, null, 'No cropped photo, because the check did not run.');
+
+        renderVerdict(report, renderChecks(report, profile));
+        show('result');
+      } catch (_) {
+        showError('We could not reach the server. Check your connection, then try again.', true);
       } finally {
-        URL.revokeObjectURL(localPreviewUrl);
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Check photo';
       }
     });
 
-    loadCountries().catch(err => {
-      profileHint.textContent = 'Failed to load country profiles.';
-      errorText.textContent = err.message;
+    $('retryBtn').addEventListener('click', () => form.requestSubmit());
+
+    function route() {
+      const tips = location.hash === '#tips';
+      $('checkView').hidden = tips;
+      $('tipsView').hidden = !tips;
+      $('navCheck').removeAttribute('aria-current');
+      $('navTips').removeAttribute('aria-current');
+      (tips ? $('navTips') : $('navCheck')).setAttribute('aria-current', 'page');
+      document.title = tips ? 'Photo tips: Photo ID Studio' : 'Photo ID Studio: check a passport photo';
+    }
+    $('tipsCheck').addEventListener('click', (e) => { e.preventDefault(); $('navCheck').click(); });
+    $('navCheck').addEventListener('click', (e) => {
+      e.preventDefault();
+      history.pushState(null, '', '/');
+      route();
+      window.scrollTo(0, 0);
     });
-    loadPrivacyNotice();
+    window.addEventListener('hashchange', () => { route(); window.scrollTo(0, 0); });
+    window.addEventListener('popstate', route);
+
+    route();
+    loadCountries();
   </script>
 </body>
 </html>

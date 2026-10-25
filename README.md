@@ -18,7 +18,7 @@ Photo upload app with:
 2. Returns specific error codes like `NO_FACE_DETECTED`, `FACE_TOO_SMALL`, `CROP_OUT_OF_BOUNDS`.
 3. Shows what to do next for each failed/warned check.
 4. Output image is generated only when crop requirements can be satisfied.
-5. UI style is aligned to the `kooexperience.com` dark theme.
+5. UI is a light, plain theme so the photo is previewed on white. See `DESIGN.md`.
 6. Optional beautify mode supports color correction and soft-light cleanup (no geometry edits).
 7. Assist mode uses edge-guarded background whitening and never uses generative shoulder/hair repaint.
 8. Mirror handling modes for selfie uploads: `auto`, `unmirror`, `keep`.
