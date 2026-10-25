@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2026-10-25
+
+### Added
+1. Required consent checkbox at upload, enforced server-side (`consent` form field, 400 without it).
+2. `/privacy` and `/terms` pages, linked from the footer and the uploader, with a takedown/abuse contact.
+3. Test suite (`tests/`) and a GitHub Actions workflow that runs it.
+
+### Changed
+1. Uploads stay in memory (no temp-file spooling); oversized or length-less bodies are rejected before parsing.
+2. Uploads are type-checked by magic bytes; disallowed types return 415.
+3. Logs no longer include client IPs or filenames; uvicorn access logging is off.
+4. Rate-limiter IP state is pruned daily.
+5. Public `/api/status` no longer exposes per-request timing, size or error details.
+6. The rembg `u2net_human_seg` model is baked into the Docker image.
+
 ## [0.3.1] - 2026-03-07
 
 ### Added

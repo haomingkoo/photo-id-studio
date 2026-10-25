@@ -19,6 +19,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, Response, Uploa
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.formparsers import MultiPartParser
 
 from app import __version__
 from app.config import load_country_settings
@@ -137,6 +138,15 @@ PUBLIC_REPO_URL = (
 PUBLIC_APP_URL = os.getenv("PHOTO_API_PUBLIC_APP_URL", "").strip() or None
 PHOTO_STORAGE_POLICY = os.getenv("PHOTO_API_STORAGE_POLICY", "transient-in-memory").strip() or "transient-in-memory"
 RUNTIME_STARTED_UTC = dt.datetime.now(dt.timezone.utc)
+RETENTION_POLICY = (
+    "Your photo is held in server memory only while this check runs. It is never written to disk, "
+    "is discarded when the response is sent, and is not used for training."
+)
+CONSENT_VALUES = {"1", "true", "yes", "on"}
+CONSENT_REQUIRED_DETAIL = (
+    "Consent is required: confirm this is your photo, or that you have permission from the person "
+    "(or their parent or guardian if they are under 18) to process it."
+)
 
 app = FastAPI(title="Photo ID Compliance Studio", version=__version__)
 
@@ -160,6 +170,21 @@ async def add_security_headers(request: Request, call_next):
         response.headers.setdefault("Cache-Control", "no-store, max-age=0")
         response.headers.setdefault("Pragma", "no-cache")
     return response
+
+
+@app.middleware("http")
+async def limit_analyze_body(request: Request, call_next):
+    # Uploads are buffered in memory, so cap the body before multipart parsing starts.
+    if request.method == "POST" and request.url.path == "/api/analyze":
+        header = request.headers.get("content-length")
+        if not header or not header.isdigit():
+            return JSONResponse(status_code=411, content={"detail": "Content-Length header is required."})
+        if int(header) > MAX_REQUEST_BYTES:
+            return JSONResponse(
+                status_code=413,
+                content={"detail": f"Request body is too large. Hard limit is {MAX_UPLOAD_MB:.0f}MB."},
+            )
+    return await call_next(request)
 
 
 pipeline = PhotoCompliancePipeline()
@@ -190,6 +215,14 @@ class _IpRateLimiter:
         self._tokens_per_second = self._rate_per_min / 60.0
         self._states: dict[str, _BucketState] = {}
         self._lock = threading.Lock()
+        self._pruned_day_ordinal = 0
+
+    def _prune_locked(self, day_ordinal: int) -> None:
+        # Drop IPs not seen today, at most once per UTC day.
+        if self._pruned_day_ordinal == day_ordinal:
+            return
+        self._pruned_day_ordinal = day_ordinal
+        self._states = {ip: st for ip, st in self._states.items() if st.day_ordinal == day_ordinal}
 
     @property
     def rate_per_min(self) -> int:
@@ -229,6 +262,8 @@ class _IpRateLimiter:
                 state.day_ordinal = day_ordinal
                 state.daily_count = 0
 
+            self._prune_locked(day_ordinal)
+
             if state.daily_count >= self._daily_limit:
                 return _RateDecision(
                     allowed=False,
@@ -266,6 +301,11 @@ DAILY_LIMIT = max(1, int(os.getenv("PHOTO_API_DAILY_LIMIT", "200")))
 MAX_INFLIGHT_ANALYZE = max(1, int(os.getenv("PHOTO_API_MAX_INFLIGHT", "3")))
 MAX_UPLOAD_MB = max(1.0, float(os.getenv("PHOTO_API_MAX_UPLOAD_MB", "20")))
 MAX_UPLOAD_BYTES = int(MAX_UPLOAD_MB * 1024 * 1024)
+# Multipart framing and form fields on top of the photo itself.
+MULTIPART_OVERHEAD_BYTES = 256 * 1024
+MAX_REQUEST_BYTES = MAX_UPLOAD_BYTES + MULTIPART_OVERHEAD_BYTES
+# Keep uploads in memory: never roll the spooled upload over to a temp file on disk.
+MultiPartParser.spool_max_size = MAX_REQUEST_BYTES + 1
 UPLOAD_READ_CHUNK_BYTES = max(64 * 1024, int(os.getenv("PHOTO_API_UPLOAD_CHUNK_BYTES", str(1024 * 1024))))
 TRUST_X_FORWARDED_FOR = os.getenv("PHOTO_API_TRUST_XFF", "0").strip().lower() in {
     "1",
@@ -512,6 +552,22 @@ def _content_length_exceeds_limit(request: Request, max_bytes: int) -> bool:
         return False
 
 
+_HEIF_BRANDS = {b"heic", b"heix", b"hevc", b"hevx", b"heim", b"heis", b"mif1", b"msf1"}
+
+
+def _sniff_image_type(data: bytes) -> str | None:
+    """Return the image type from magic bytes, or None if it is not an allowed type."""
+    if data.startswith(b"\xff\xd8\xff"):
+        return "jpeg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    if data[4:8] == b"ftyp" and data[8:12] in _HEIF_BRANDS:
+        return "heif"
+    return None
+
+
 async def _read_upload_with_limit(photo: UploadFile, max_bytes: int, chunk_size: int) -> bytes:
     chunks = bytearray()
     total_bytes = 0
@@ -551,7 +607,9 @@ def privacy() -> dict[str, Any]:
         "ok": True,
         "stores_uploads": False,
         "storage_policy": PHOTO_STORAGE_POLICY,
-        "retention_policy": "Photos are processed in-memory for the request and not persisted by the app.",
+        "retention_policy": RETENTION_POLICY,
+        "privacy_url": "/privacy",
+        "terms_url": "/terms",
         "repo_url": PUBLIC_REPO_URL,
         "app_url": PUBLIC_APP_URL,
     }
@@ -576,6 +634,7 @@ def countries() -> list[CountryInfo]:
 
 
 def _build_status_payload(now_utc: dt.datetime, *, include_memory: bool = False) -> dict[str, Any]:
+    """Full status. Includes request timing and size details, so only admin routes should return it."""
     telemetry = ANALYZE_TELEMETRY.snapshot(now_utc)
     pipeline_runtime = pipeline.runtime_diagnostics()
     latest = telemetry.get("latest")
@@ -646,7 +705,13 @@ def _build_status_payload(now_utc: dt.datetime, *, include_memory: bool = False)
 
 @app.get("/api/status")
 def status() -> dict[str, Any]:
-    return _build_status_payload(dt.datetime.now(dt.timezone.utc), include_memory=False)
+    payload = _build_status_payload(dt.datetime.now(dt.timezone.utc), include_memory=False)
+    # Per-request timing, size and error details live behind /api/admin/status.
+    payload["latest_run"] = None
+    payload["errors"] = {"failed_runs_7d": payload["errors"]["failed_runs_7d"]}
+    payload["pipeline"].pop("runtime", None)
+    payload["service_meta"].pop("runtime_started_ts", None)
+    return payload
 
 
 @app.get("/api/admin/status")
@@ -769,6 +834,7 @@ async def analyze(
     mode: str = Form("assist"),
     beauty_mode: str = Form("none"),
     mirror_mode: str = Form("auto"),
+    consent: str = Form(""),
 ) -> AnalyzeResponse:
     client_ip = _resolve_client_ip(request)
     decision = RATE_LIMITER.check(client_ip)
@@ -783,12 +849,7 @@ async def analyze(
             headers={"Retry-After": retry_after},
         )
         _set_limit_headers(payload, decision)
-        LOG.warning(
-            "analyze_rejected ip=%s reason=%s retry_after=%s",
-            client_ip,
-            decision.reason,
-            retry_after,
-        )
+        LOG.warning("analyze_rejected reason=%s retry_after=%s", decision.reason, retry_after)
         return payload
 
     if not INFLIGHT_ANALYZE_GUARD.acquire(blocking=False):
@@ -798,7 +859,7 @@ async def analyze(
             headers={"Retry-After": "5"},
         )
         _set_limit_headers(payload, decision)
-        LOG.warning("analyze_rejected ip=%s reason=max_inflight", client_ip)
+        LOG.warning("analyze_rejected reason=max_inflight")
         return payload
 
     _set_limit_headers(response, decision)
@@ -821,8 +882,8 @@ async def analyze(
                 detail=f"Request body is too large. Hard limit is {MAX_UPLOAD_MB:.0f}MB.",
             )
 
-        if photo.content_type is None or not photo.content_type.startswith("image/"):
-            raise HTTPException(status_code=400, detail="Please upload a valid image file.")
+        if consent.strip().lower() not in CONSENT_VALUES:
+            raise HTTPException(status_code=400, detail=CONSENT_REQUIRED_DETAIL)
 
         file_bytes = await _read_upload_with_limit(
             photo,
@@ -832,6 +893,11 @@ async def analyze(
         if not file_bytes:
             raise HTTPException(status_code=400, detail="Uploaded image is empty.")
         upload_bytes = len(file_bytes)
+        if _sniff_image_type(file_bytes) is None:
+            raise HTTPException(
+                status_code=415,
+                detail="Unsupported file type. Please upload a JPG, PNG, WEBP or HEIC image.",
+            )
 
         report, processed_b64, original_b64, comparison_no_corr_b64, comparison_color_corr_b64 = pipeline.analyze(
             file_bytes=file_bytes,
@@ -855,7 +921,7 @@ async def analyze(
         outcome = "internal_error"
         status_code = 500
         error_kind = exc.__class__.__name__
-        LOG.exception("analyze_failed ip=%s filename=%s", client_ip, photo.filename or "upload.jpg")
+        LOG.exception("analyze_failed error_kind=%s", error_kind)
         return JSONResponse(status_code=500, content={"error": "analysis_failed", "detail": "Internal error"})
     finally:
         elapsed_ms = int((time.perf_counter() - started_mono) * 1000)
@@ -882,12 +948,11 @@ async def analyze(
             if isinstance(rss_before, float) and isinstance(rss_after, float):
                 rss_delta = round(rss_after - rss_before, 2)
             LOG.info(
-                "analyze_metrics ip=%s status=%s outcome=%s error_kind=%s country=%s mode=%s beauty_mode=%s mirror_mode=%s "
+                "analyze_metrics status=%s outcome=%s error_kind=%s country=%s mode=%s beauty_mode=%s mirror_mode=%s "
                 "upload_bytes=%s original_b64_bytes=%s processed_b64_bytes=%s cmp_no_corr_b64_bytes=%s "
                 "cmp_color_corr_b64_bytes=%s overall_status=%s segmentation_backend=%s elapsed_ms=%s "
                 "rss_before_mb=%s rss_after_mb=%s rss_delta_mb=%s hwm_after_mb=%s maxrss_after_mb=%s "
                 "cgroup_usage_mb=%s cgroup_limit_mb=%s",
-                client_ip,
                 status_code,
                 outcome,
                 error_kind,
@@ -928,6 +993,16 @@ async def analyze(
 
 if WEB_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
+
+
+@app.get("/privacy")
+def privacy_page() -> FileResponse:
+    return FileResponse(WEB_DIR / "privacy.html")
+
+
+@app.get("/terms")
+def terms_page() -> FileResponse:
+    return FileResponse(WEB_DIR / "terms.html")
 
 
 @app.get("/")
