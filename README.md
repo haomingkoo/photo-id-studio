@@ -238,11 +238,15 @@ This repository uses:
 
 ## Privacy & Data Handling
 
-1. Uploaded photos are processed in-memory for the active request.
-2. This app does not persist uploaded photos to local disk or database.
-3. Responses include image previews in the API payload; clients should handle their own retention/caching policies.
-4. API responses set `Cache-Control: no-store` for `/api/*` routes.
-5. Public transparency endpoint: `GET /api/privacy`.
+1. Uploaded photos are held in memory for the active request only. Starlette's multipart spool threshold is raised above the upload limit, so uploads never roll over to a temp file on disk.
+2. `/api/analyze` requires `Content-Length` and rejects bodies over the upload limit before parsing.
+3. This app does not persist uploaded photos to local disk or database, and does not use them for training.
+4. Uploads require a `consent=true` form field (400 without it). Allowed types are checked by magic bytes (JPEG, PNG, WEBP, HEIC/HEIF); anything else gets 415.
+5. Logs carry no client IP or filename. Uvicorn access logging is off. The rate limiter drops IPs not seen on the current UTC day.
+6. Human-readable `/privacy` and `/terms` pages (drafts with `[LAWYER REVIEW]` markers).
+7. Responses include image previews in the API payload; clients should handle their own retention/caching policies.
+8. API responses set `Cache-Control: no-store` for `/api/*` routes.
+9. Public transparency endpoint: `GET /api/privacy`.
 
 Recommended env:
 
@@ -253,7 +257,7 @@ Recommended env:
 ## Legal & Risk Controls
 
 1. Keep a clear user notice that this tool provides technical guidance and not legal/immigration advice.
-2. Require users to confirm they have consent/rights for any uploaded photo.
+2. Users must confirm consent for every upload (UI checkbox, enforced server-side).
 3. Keep admin endpoints protected with `PHOTO_API_ADMIN_API_KEY`.
 4. Keep CORS allowlist strict via `PHOTO_API_ALLOWED_ORIGINS`.
 5. Review logs for abuse patterns and unauthorized admin requests.
@@ -263,7 +267,7 @@ Recommended env:
 This service exposes control-center contract endpoints:
 
 1. `GET /api/health`
-2. `GET /api/status`
+2. `GET /api/status` (public summary; per-request timing and errors only in `/api/admin/status`)
 3. `GET /api/admin/status`
 4. `GET /api/admin/usage-summary`
 5. `GET /api/admin/pipeline-status`
@@ -319,6 +323,13 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8020
 ```
 
+Tests:
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest tests
+```
+
 Open:
 
 - `http://127.0.0.1:8020`
@@ -333,6 +344,7 @@ Multipart form fields:
 1. `photo` (image file)
 2. `country_code` (default `SG`)
 3. `mode` (`strict` or `assist`)
+4. `consent` (required, `true`): the uploader confirms the photo is theirs or they have permission
 
 Returns:
 
@@ -348,5 +360,5 @@ Returns available country profiles from `app/config/countries.yaml`.
 1. Current country profile: Singapore (`SG`) with output `400x514`.
 2. Add more country specs by extending `app/config/countries.yaml`.
 3. Some checks (for example whether an image was edited externally) are heuristic and should be reviewed before final submission workflows.
-4. Upload images are processed in-memory and are not persisted to local disk by default.
+4. Upload images are held in memory for the request and never written to disk.
 5. If memory plateaus high with low CPU, check whether `rembg` model load occurred and inspect `analyze_metrics` logs.

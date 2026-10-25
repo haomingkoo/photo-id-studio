@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Notice - Photo Compliance Studio</title>
+  <style>
+    :root { --bg: #080808; --text: #e5e7eb; --muted: #9ca3af; --border: #1e1e1e; --accent: #93c5fd; --flag: #f59e0b; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    main { max-width: 760px; margin: 0 auto; padding: 32px 20px 48px; }
+    h1 { font-size: 28px; margin: 0 0 4px; }
+    h2 { font-size: 18px; margin: 28px 0 8px; }
+    p, li { color: var(--text); }
+    .meta { color: var(--muted); font-size: 13px; }
+    a { color: var(--accent); text-underline-offset: 2px; }
+    a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .review { color: var(--flag); font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; vertical-align: top; padding: 8px; border-bottom: 1px solid var(--border); }
+    .table-wrap { overflow-x: auto; }
+    footer { margin-top: 36px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 13px; color: var(--muted); }
+  </style>
+</head>
+<body>
+<main>
+  <p><a href="/">&larr; Back to Photo Compliance Studio</a></p>
+  <h1>Privacy Notice</h1>
+  <p class="meta">Last updated: 25 October 2026. <span class="review">[LAWYER REVIEW]</span> This draft has not yet been reviewed by a lawyer.</p>
+
+  <h2>Who we are</h2>
+  <p>Photo Compliance Studio (studio.kooexperience.com) is a personal project run by Haoming Koo in Singapore. It checks whether a photo meets passport or ID photo rules and returns a cropped version.</p>
+  <p>Contact for privacy questions, access or correction requests: [CONTACT EMAIL — owner to confirm]. <span class="review">[LAWYER REVIEW]</span> Confirm the data protection contact required by PDPA s. 11(5).</p>
+
+  <h2>What we process</h2>
+  <ul>
+    <li><strong>Your photo.</strong> A photo of a face is personal data. You upload it so we can run the compliance check.</li>
+    <li><strong>Face measurements.</strong> Software on our own server finds face landmarks and separates the person from the background. We use these measurements only to check framing, lighting and background. We do not identify anyone or match faces against other photos.</li>
+    <li><strong>Photo metadata.</strong> We read the orientation and capture date stored in the photo file. The capture date is shown back to you in the report. The images we return do not carry the original metadata.</li>
+    <li><strong>The file name.</strong> It is used only to read the file extension and may appear in the report sent back to you.</li>
+    <li><strong>Your IP address.</strong> Used for rate limiting (see below).</li>
+  </ul>
+
+  <h2>How your photo is handled</h2>
+  <ul>
+    <li>Your photo is held in server memory only while the check runs. The app never writes it to disk or to a database.</li>
+    <li>When the response is sent, the photo and every image made from it are discarded from the server. The results exist only in your browser until you close the tab.</li>
+    <li>Photos are not used to train any model. They are not shared with or sent to any AI or face-recognition service.</li>
+    <li>Nobody else can see your photo or results. They are returned only in the response to your own request.</li>
+  </ul>
+
+  <h2>Photos of other people and of children</h2>
+  <p>Upload a photo only if it is your own, or if you have permission from the person in it. For anyone under 18, a parent or guardian must give that permission. You confirm this with the checkbox before each upload, and the service rejects uploads without it.</p>
+  <p><span class="review">[LAWYER REVIEW]</span> Confirm the age threshold and guardian-consent wording for Singapore PDPA and for EU visitors under GDPR.</p>
+
+  <h2>What we keep and for how long</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Data</th><th>Where</th><th>How long</th></tr></thead>
+      <tbody>
+        <tr><td>Photo and processed images</td><td>Server memory</td><td>Only for the length of your request</td></tr>
+        <tr><td>IP address (rate limiting)</td><td>Server memory</td><td>Until the end of the UTC day it was last seen, and cleared on restart</td></tr>
+        <tr><td>IP address (failed admin logins only)</td><td>Server memory</td><td>Up to 45 minutes</td></tr>
+        <tr><td>Usage counters: time, country profile, mode, file size, result and error codes. No IP, file name or image.</td><td>Server memory</td><td>The last 80 requests, cleared on restart</td></tr>
+        <tr><td>Application logs: error types and rate-limit events. No IP, file name or image.</td><td>Railway log storage</td><td>Railway's log retention period <span class="review">[LAWYER REVIEW: confirm period]</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>The app does not log your IP address or file name, and per-request access logging is turned off. The site sets no cookies and uses no analytics or tracking.</p>
+
+  <h2>Service providers</h2>
+  <ul>
+    <li><strong>Railway</strong> hosts the server that processes your photo and stores the application logs. Railway's own network edge may record connection details such as IP addresses.</li>
+    <li><strong>Cloudflare</strong> provides DNS and proxies traffic to the site. Your photo passes through Cloudflare in transit over HTTPS. It is not stored there by us.</li>
+  </ul>
+  <p><span class="review">[LAWYER REVIEW]</span> Confirm processor terms, data transfer locations and edge log retention for Railway and Cloudflare.</p>
+
+  <h2>Why we process it</h2>
+  <p>We process your photo only to provide the check you asked for, based on your consent. We use IP addresses to protect the service from abuse. <span class="review">[LAWYER REVIEW]</span> Confirm the purpose and legal-basis wording under PDPA and GDPR.</p>
+
+  <h2>Your choices and rights</h2>
+  <p>You can withdraw consent at any time by not uploading. Because photos are not kept, there is normally nothing to delete after a check. For questions, access or correction requests, or a complaint, contact [CONTACT EMAIL — owner to confirm]. You may also complain to Singapore's Personal Data Protection Commission, or to your local data protection authority if you are in the EU.</p>
+
+  <h2>Takedown and abuse</h2>
+  <p>To report misuse of this service, such as someone uploading your photo without permission, contact [CONTACT EMAIL — owner to confirm].</p>
+
+  <h2>Changes</h2>
+  <p>We will update this page if the way the service handles data changes. The date at the top shows the latest version.</p>
+
+  <footer>
+    <a href="/">Home</a> &middot; <a href="/terms">Terms of use</a> &middot; Takedown or abuse reports: [CONTACT EMAIL — owner to confirm]
+  </footer>
+</main>
+</body>
+</html>
