@@ -65,12 +65,13 @@
       </tbody>
     </table>
   </div>
-  <p>The app does not log your IP address or file name, and per-request access logging is turned off. The site sets no cookies and uses no analytics or tracking.</p>
+  <p>The app does not log your IP address or file name, and per-request access logging is turned off. The site sets no cookies. The only analytics is Cloudflare Web Analytics (see below).</p>
 
   <h2>Service providers</h2>
   <ul>
     <li><strong>Railway</strong> hosts the server that processes your photo and stores the application logs. Railway's own network edge may record connection details such as IP addresses.</li>
     <li><strong>Cloudflare</strong> provides DNS and proxies traffic to the site. Your photo passes through Cloudflare in transit over HTTPS. It is not stored there by us.</li>
+    <li><strong>Cloudflare Web Analytics</strong> (cookieless, aggregate page views, no input capture). Cloudflare adds a small script to each page that counts visits. It does not see your photo or anything you type.</li>
   </ul>
   <p><span class="review">[LAWYER REVIEW]</span> Confirm processor terms, data transfer locations and edge log retention for Railway and Cloudflare.</p>
 
