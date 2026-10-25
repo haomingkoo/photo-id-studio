@@ -272,6 +272,19 @@
       background: repeating-conic-gradient(#101010 0% 25%, #0d0d0d 0% 50%) 50% / 14px 14px;
       min-height: 220px;
     }
+    .img-box img[hidden] { display: none; }
+    .img-empty {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      text-align: center;
+      font-size: 13px;
+      color: var(--muted);
+      min-height: 220px;
+    }
+    .img-empty[hidden] { display: none; }
 
     .status-pill {
       display: inline-flex;
@@ -297,9 +310,12 @@
     table {
       width: 100%;
       border-collapse: collapse;
-      min-width: 900px;
       background: var(--surface);
     }
+    td { overflow-wrap: break-word; }
+    td.check-code { overflow-wrap: anywhere; }
+    th:nth-child(1) { width: 24%; }
+    th:nth-child(2) { width: 10%; }
     th, td {
       padding: 11px 11px;
       border-bottom: 1px solid var(--border);
@@ -471,6 +487,21 @@
       .guide-grid { grid-template-columns: 1fr; }
       .flowchart-scroll { margin: 0 -4px; }
     }
+
+    @media (max-width: 767px) {
+      thead { display: none; }
+      table, tbody, tr, td { display: block; width: 100%; }
+      #checksBody tr { padding: 12px; border-bottom: 1px solid var(--border); }
+      #checksBody tr:last-child { border-bottom: 0; }
+      #checksBody td { border: 0; padding: 2px 0; }
+      #checksBody td[data-label] { display: grid; grid-template-columns: 7.5em minmax(0, 1fr); gap: 8px; }
+      #checksBody td[data-label]::before {
+        content: attr(data-label);
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 400;
+      }
+    }
   </style>
 </head>
 <body>
@@ -568,11 +599,13 @@
             <div class="images">
               <div class="img-box">
                 <div class="img-title">Original</div>
-                <img id="originalPreview" alt="Original preview" />
+                <img id="originalPreview" alt="Your uploaded photo" hidden />
+                <p class="img-empty" id="originalEmpty">Your photo appears here after you upload it.</p>
               </div>
               <div class="img-box">
                 <div class="img-title">Processed</div>
-                <img id="processedPreview" alt="Processed preview" />
+                <img id="processedPreview" alt="Your photo, cropped to the country size" hidden />
+                <p class="img-empty" id="processedEmpty">The cropped photo appears here after the check.</p>
               </div>
             </div>
             <div id="compareWrap" style="display:none; margin-bottom:12px;">
@@ -836,9 +869,23 @@
     const tabGuideBtn = document.getElementById('tabGuideBtn');
     const studioPanel = document.getElementById('studioPanel');
     const guidePanel = document.getElementById('guidePanel');
+    const originalEmpty = document.getElementById('originalEmpty');
+    const processedEmpty = document.getElementById('processedEmpty');
+
+    function setPreview(img, empty, src, emptyText) {
+      if (src) {
+        img.src = src;
+      } else {
+        img.removeAttribute('src');
+        empty.textContent = emptyText;
+      }
+      img.hidden = !src;
+      empty.hidden = !!src;
+    }
+
     originalPreview.addEventListener('error', () => {
       // Some browsers cannot render HEIC blobs directly; backend fallback preview is used after analyze.
-      originalPreview.removeAttribute('src');
+      setPreview(originalPreview, originalEmpty, null, 'This browser cannot preview the file. The check still runs.');
     });
 
     let countryData = [];
@@ -915,19 +962,28 @@
       const row = document.createElement('tr');
 
       const codeCell = document.createElement('td');
-      codeCell.textContent = check.code;
+      codeCell.className = 'check-code';
+      codeCell.dataset.label = 'Code';
+      // Allow line breaks after underscores so long codes wrap at word boundaries.
+      check.code.split('_').forEach((part, i, parts) => {
+        appendText(codeCell, i < parts.length - 1 ? `${part}_` : part);
+        if (i < parts.length - 1) codeCell.appendChild(document.createElement('wbr'));
+      });
       row.appendChild(codeCell);
 
       const statusCell = document.createElement('td');
+      statusCell.dataset.label = 'Status';
       statusCell.className = statusClass(check.status);
       statusCell.textContent = check.status.toUpperCase();
       row.appendChild(statusCell);
 
       const messageCell = document.createElement('td');
+      messageCell.dataset.label = 'Problem';
       messageCell.textContent = check.message;
       row.appendChild(messageCell);
 
       const actionCell = document.createElement('td');
+      actionCell.dataset.label = 'What to do';
       actionCell.textContent = check.action;
       row.appendChild(actionCell);
 
@@ -1012,8 +1068,8 @@
       fd.append('consent', 'true');
 
       const localPreviewUrl = URL.createObjectURL(file);
-      originalPreview.src = localPreviewUrl;
-      processedPreview.removeAttribute('src');
+      setPreview(originalPreview, originalEmpty, localPreviewUrl);
+      setPreview(processedPreview, processedEmpty, null, 'Checking your photo...');
       compareNoColorPreview.removeAttribute('src');
       compareColorPreview.removeAttribute('src');
       comparePanelTitle.textContent = 'Color Correction Comparison';
@@ -1027,12 +1083,13 @@
         const payload = await response.json();
         if (!response.ok) {
           errorText.textContent = payload.detail || payload.error || 'Analysis failed.';
+          setPreview(processedPreview, processedEmpty, null, 'No cropped photo, because the check did not run.');
           return;
         }
 
         const report = payload.report;
         if (payload.original_image_base64) {
-          originalPreview.src = `data:${payload.original_image_mime || 'image/jpeg'};base64,${payload.original_image_base64}`;
+          setPreview(originalPreview, originalEmpty, `data:${payload.original_image_mime || 'image/jpeg'};base64,${payload.original_image_base64}`);
         }
         renderSummaryChips(report);
 
@@ -1053,10 +1110,15 @@
 
         if (payload.processed_image_base64) {
           const imageUrl = `data:${payload.processed_image_mime || 'image/jpeg'};base64,${payload.processed_image_base64}`;
-          processedPreview.src = imageUrl;
+          setPreview(processedPreview, processedEmpty, imageUrl);
           downloadBtn.href = imageUrl;
           downloadBtn.download = 'photo-compliance-output.jpg';
           downloadBtn.style.display = 'inline-flex';
+        } else {
+          const noFace = (report.error_codes || []).includes('NO_FACE_DETECTED');
+          setPreview(processedPreview, processedEmpty, null, noFace
+            ? 'No cropped photo, because no face was found.'
+            : 'No cropped photo for this upload. See the checks below.');
         }
 
         if (payload.comparison_no_correction_base64 && payload.comparison_color_correction_base64) {
@@ -1079,6 +1141,7 @@
         }
       } catch (error) {
         errorText.textContent = `Request failed: ${error.message}`;
+        setPreview(processedPreview, processedEmpty, null, 'No cropped photo, because the check did not run.');
       } finally {
         URL.revokeObjectURL(localPreviewUrl);
       }
