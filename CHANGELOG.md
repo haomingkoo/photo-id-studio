@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-10-26
+
+### Changed
+1. Redesigned the web app: light theme, IBM Plex Sans, one calm-blue accent, shared header and footer. Design rules live in `DESIGN.md`.
+2. Results are a plain-language checklist (Needs fixing, Worth checking, Passed). Check codes are no longer shown to users.
+3. The cropped photo is shown at the document's real proportions with its pixel size.
+4. Advanced options (editing, touch-up, mirrored selfies) are folded under "More options".
+5. Photo tips replace the engineering guide; engineering notes stay in the README.
+6. Privacy and terms pages use the same header, footer and stylesheet.
+
+### Added
+1. Designed loading, error (with retry) and rules-failed-to-load states.
+2. Favicon, meta description and Open Graph tags.
+3. `tests/test_web_copy.py`: every pipeline check code must have plain copy in the page.
+
 ## [0.4.0] - 2026-10-25
 
 ### Added
