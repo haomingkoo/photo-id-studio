@@ -281,8 +281,9 @@ def test_legal_pages_served(client, path):
     response = client.get(path)
 
     assert response.status_code == 200
-    assert "[LAWYER REVIEW]" in response.text
-    assert "[CONTACT EMAIL" in response.text
+    assert "privacy@kooexperience.com" in response.text
+    assert "LAWYER REVIEW" not in response.text and "owner to confirm" not in response.text
+    assert "privacy@kooexperience.com" in response.text
 
 
 def test_index_has_required_consent_and_legal_links(client):

@@ -243,7 +243,7 @@ This repository uses:
 3. This app does not persist uploaded photos to local disk or database, and does not use them for training.
 4. Uploads require a `consent=true` form field (400 without it). Allowed types are checked by magic bytes (JPEG, PNG, WEBP, HEIC/HEIF); anything else gets 415.
 5. Logs carry no client IP or filename. Uvicorn access logging is off. The rate limiter drops IPs not seen on the current UTC day.
-6. Human-readable `/privacy` and `/terms` pages (drafts with `[LAWYER REVIEW]` markers).
+6. Human-readable `/privacy` and `/terms` pages (plain-English drafts; contact privacy@kooexperience.com).
 7. Responses include image previews in the API payload; clients should handle their own retention/caching policies.
 8. API responses set `Cache-Control: no-store` for `/api/*` routes.
 9. Public transparency endpoint: `GET /api/privacy`.
