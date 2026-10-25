@@ -167,6 +167,7 @@ For low-cost deployment, use these environment variables:
 15. `PHOTO_API_REMBG_IDLE_UNLOAD_SEC=900`
 16. `PHOTO_API_BG_STRICT_WHITE=1`
 17. `PHOTO_API_LOG_ANALYZE_METRICS=1`
+18. `PHOTO_API_ENABLE_DOCS=0` (set to 1 locally to serve `/docs`, `/redoc` and `/openapi.json`)
 
 What this does:
 
@@ -333,7 +334,7 @@ python -m pytest tests
 Open:
 
 - `http://127.0.0.1:8020`
-- API docs: `http://127.0.0.1:8020/docs`
+- API docs: `http://127.0.0.1:8020/docs` (start with `PHOTO_API_ENABLE_DOCS=1`)
 
 ## API
 

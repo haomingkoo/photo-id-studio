@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from collections import deque
+import base64
 import datetime as dt
+import hashlib
 import ipaddress
 import logging
 import math
 import os
+import re
 import resource
 import secrets
 import sys
@@ -116,6 +119,7 @@ def _memory_snapshot() -> dict[str, float | None]:
 ALLOWED_ORIGINS = _split_csv_env("PHOTO_API_ALLOWED_ORIGINS")
 TRUSTED_PROXY_IPS = set(_split_csv_env("PHOTO_API_TRUSTED_PROXY_IPS"))
 LOG_ANALYZE_METRICS = _flag_env("PHOTO_API_LOG_ANALYZE_METRICS", False)
+ENABLE_DOCS = _flag_env("PHOTO_API_ENABLE_DOCS", False)
 ADMIN_ENABLED = _flag_env("PHOTO_API_ADMIN_ENABLED", True)
 ADMIN_API_KEY = os.getenv("PHOTO_API_ADMIN_API_KEY", "").strip()
 ADMIN_AUTH_HEADER = os.getenv("PHOTO_API_ADMIN_AUTH_HEADER", "X-API-Key").strip() or "X-API-Key"
@@ -148,7 +152,37 @@ CONSENT_REQUIRED_DETAIL = (
     "(or their parent or guardian if they are under 18) to process it."
 )
 
-app = FastAPI(title="Photo ID Compliance Studio", version=__version__)
+
+
+def _content_security_policy() -> str:
+    # Hash the page's inline scripts so the policy tracks index.html edits.
+    index_path = WEB_DIR / "index.html"
+    html = index_path.read_text(encoding="utf-8") if index_path.exists() else ""
+    hashes = " ".join(
+        "'sha256-" + base64.b64encode(hashlib.sha256(body.encode("utf-8")).digest()).decode() + "'"
+        for body in re.findall(r"<script>(.*?)</script>", html, flags=re.S)
+    )
+    return (
+        "default-src 'self'; "
+        f"script-src 'self' {hashes} https://static.cloudflareinsights.com; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; "
+        "font-src 'self'; "
+        "connect-src 'self' https://cloudflareinsights.com; "
+        "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    )
+
+
+CONTENT_SECURITY_POLICY = _content_security_policy()
+
+# Docs list every /api/admin/* route, so they stay off unless PHOTO_API_ENABLE_DOCS is set.
+app = FastAPI(
+    title="Photo ID Compliance Studio",
+    version=__version__,
+    docs_url="/docs" if ENABLE_DOCS else None,
+    redoc_url="/redoc" if ENABLE_DOCS else None,
+    openapi_url="/openapi.json" if ENABLE_DOCS else None,
+)
 
 if ALLOWED_ORIGINS:
     app.add_middleware(
@@ -166,6 +200,7 @@ async def add_security_headers(request: Request, call_next):
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Content-Security-Policy", CONTENT_SECURITY_POLICY)
     if request.url.path.startswith("/api/"):
         response.headers.setdefault("Cache-Control", "no-store, max-age=0")
         response.headers.setdefault("Pragma", "no-cache")
