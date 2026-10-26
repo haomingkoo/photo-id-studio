@@ -20,8 +20,10 @@ from typing import Any
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.exception_handlers import http_exception_handler
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.formparsers import MultiPartParser
 
 from app import __version__
@@ -1025,6 +1027,14 @@ async def analyze(
         comparison_color_correction_base64=comparison_color_corr_b64,
         comparison_image_mime="image/jpeg",
     )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def not_found_page(request: Request, exc: StarletteHTTPException) -> Response:
+    page = WEB_DIR / "404.html"
+    if exc.status_code == 404 and not request.url.path.startswith("/api") and page.exists():
+        return HTMLResponse(page.read_text(), status_code=404)
+    return await http_exception_handler(request, exc)
 
 
 if WEB_DIR.exists():
