@@ -46,6 +46,20 @@ def test_pages_share_chrome(client, path):
     assert "—" not in html  # no em dashes in copy
 
 
+def test_unknown_page_gets_styled_404(client):
+    response = client.get("/no-such-page")
+    assert response.status_code == 404
+    assert "text/html" in response.headers["content-type"]
+    assert 'href="/"' in response.text and "https://kooexperience.com/" in response.text
+    assert FOOTER in response.text
+
+
+def test_unknown_api_path_stays_json(client):
+    response = client.get("/api/no-such-endpoint")
+    assert response.status_code == 404
+    assert response.headers["content-type"] == "application/json"
+
+
 @pytest.mark.parametrize("path", ["/static/site.css", "/static/favicon.svg", "/static/fonts/fonts.css", "/static/fonts/plex-sans-latin-400.woff2", "/static/media/studio-poster.jpg"])
 def test_static_assets_served(client, path):
     assert client.get(path).status_code == 200
