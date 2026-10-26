@@ -127,6 +127,22 @@
     .rule-table th { font-size: 13px; font-weight: 600; color: var(--muted); }
     .rule-table td:first-child { font-weight: 500; width: 38%; padding-right: 16px; }
     .tips .aside { margin-top: 24px; display: grid; gap: 8px; color: var(--muted); }
+
+    /* Tour video */
+    .page-head .tour-link { margin-top: 12px; }
+    .link-btn { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-size: 15px; font-weight: 500; text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; cursor: pointer; }
+    .link-btn:hover { color: var(--accent-ink); }
+    .tour { width: min(960px, calc(100% - 32px)); max-width: none; max-height: calc(100dvh - 32px); padding: 0; border: 1px solid var(--line); border-radius: var(--r-panel); background: var(--surface); color: var(--ink); overflow: auto; }
+    .tour::backdrop { background: rgba(22, 26, 32, .6); }
+    .tour-inner { display: grid; gap: 12px; padding: 16px; }
+    .tour-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .tour-head h2 { font-size: 18px; }
+    .tour-close { min-height: 44px; min-width: 44px; padding: 0; font-size: 24px; line-height: 1; }
+    .tour video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: var(--r-control); }
+    .tour .credit { font-size: 13px; color: var(--muted); }
+    .tour[open] { animation: tour-in .15s ease-out; }
+    @keyframes tour-in { from { opacity: 0; } to { opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) { .tour[open] { animation: none; } }
   </style>
 </head>
 <body>
@@ -149,6 +165,7 @@
       <div class="page-head">
         <h1>Will this photo pass?</h1>
         <p>Upload a passport or IC photo. We check it against the official rules and give you a copy cropped to the right size.</p>
+        <p class="tour-link"><button type="button" class="link-btn" id="tourBtn" aria-haspopup="dialog">&#9654; 30-second tour</button></p>
       </div>
 
       <div class="studio">
@@ -344,6 +361,20 @@
       </div>
     </section>
   </main>
+
+  <dialog class="tour" id="tour" aria-labelledby="tourTitle">
+    <div class="tour-inner">
+      <div class="tour-head">
+        <h2 id="tourTitle">Photo ID Studio in 30 seconds</h2>
+        <button type="button" class="btn tour-close" id="tourClose" aria-label="Close video">&times;</button>
+      </div>
+      <video id="tourVideo" controls preload="none" playsinline poster="/static/media/studio-poster.jpg">
+        <source src="/static/media/studio.webm" type="video/webm" />
+        <source src="/static/media/studio.mp4" type="video/mp4" />
+      </video>
+      <p class="credit">Music: Sascha Ende, ende.app (CC BY 4.0)</p>
+    </div>
+  </dialog>
 
   <footer class="site-footer">
     <div class="wrap">
@@ -694,6 +725,15 @@
     });
     window.addEventListener('hashchange', () => { route(); window.scrollTo(0, 0); });
     window.addEventListener('popstate', route);
+
+    // Tour video: native dialog gives Esc, focus trap and inert background.
+    const tour = $('tour');
+    const tourVideo = $('tourVideo');
+    $('tourBtn').addEventListener('click', () => tour.showModal());
+    $('tourClose').addEventListener('click', () => tour.close());
+    tour.addEventListener('click', (e) => { if (e.target === tour) tour.close(); });
+    tour.addEventListener('close', () => { tourVideo.pause(); $('tourBtn').focus(); });
+    if (new URLSearchParams(location.search).get('tour') === '1') tour.showModal();
 
     route();
     loadCountries();

@@ -327,7 +327,7 @@ def test_csp_allows_index_inline_script(client):
     for body in scripts:
         digest = base64.b64encode(hashlib.sha256(body.encode()).digest()).decode()
         assert f"'sha256-{digest}'" in csp
-    for directive in ("frame-ancestors 'none'", "object-src 'none'", "base-uri 'self'", "form-action 'self'"):
+    for directive in ("frame-ancestors 'none'", "object-src 'none'", "base-uri 'self'", "form-action 'self'", "media-src 'self'"):
         assert directive in csp
     assert "https://static.cloudflareinsights.com" in csp
     assert "'unsafe-inline'" not in csp.split("script-src")[1].split(";")[0]

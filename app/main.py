@@ -168,6 +168,7 @@ def _content_security_policy() -> str:
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: blob:; "
         "font-src 'self'; "
+        "media-src 'self'; "
         "connect-src 'self' https://cloudflareinsights.com; "
         "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
     )

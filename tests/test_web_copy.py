@@ -46,6 +46,13 @@ def test_pages_share_chrome(client, path):
     assert "—" not in html  # no em dashes in copy
 
 
-@pytest.mark.parametrize("path", ["/static/site.css", "/static/favicon.svg", "/static/fonts/fonts.css", "/static/fonts/plex-sans-latin-400.woff2"])
+@pytest.mark.parametrize("path", ["/static/site.css", "/static/favicon.svg", "/static/fonts/fonts.css", "/static/fonts/plex-sans-latin-400.woff2", "/static/media/studio-poster.jpg"])
 def test_static_assets_served(client, path):
     assert client.get(path).status_code == 200
+
+
+def test_tour_video_supports_range_requests(client):
+    response = client.get("/static/media/studio.mp4", headers={"Range": "bytes=0-99"})
+    assert response.status_code == 206
+    assert response.headers["content-type"] == "video/mp4"
+    assert len(response.content) == 100
