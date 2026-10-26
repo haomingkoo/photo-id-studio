@@ -1,5 +1,13 @@
 # Photo ID Compliance Studio
 
+<p align="center">
+  <a href="https://kooexperience.com/projects/photo-compliance-studio.html"><img src="docs/media/studio-preview.webp" width="800" alt="A photo is checked, flagged with plain-language fixes, then cropped to 900 x 1200 px for a UK passport"></a>
+  <br>
+  <a href="https://studio.kooexperience.com/?tour=1">▶ 30-second tour</a> · <a href="https://studio.kooexperience.com/">Live app</a> · <a href="https://kooexperience.com/projects/photo-compliance-studio.html">kooexperience.com</a>
+  <br>
+  <sub>Music: Sascha Ende, ende.app (CC BY 4.0)</sub>
+</p>
+
 Current version: `0.3.1`
 
 [**Try Photo ID Compliance Studio**](https://studio.kooexperience.com/)
